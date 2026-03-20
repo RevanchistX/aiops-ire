@@ -1,6 +1,6 @@
 resource "helm_release" "postgresql" {
   name       = "postgresql"
-  repository = "https://charts.bitnami.com/bitnami"
+  repository = "oci://registry-1.docker.io/bitnamicharts"
   chart      = "postgresql"
   version    = var.chart_version
   namespace  = var.namespace
@@ -39,6 +39,12 @@ resource "helm_release" "postgresql" {
   set {
     name  = "primary.persistence.size"
     value = var.storage_size
+  }
+
+  # Disable resourcesPreset so explicit primary.resources takes effect (v18 chart default is "nano")
+  set {
+    name  = "primary.resourcesPreset"
+    value = "none"
   }
 
   # Resource requests

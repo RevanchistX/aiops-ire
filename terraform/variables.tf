@@ -26,3 +26,9 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "chart_version" {
+  description = "Bitnami postgresql Helm chart version to pin (overrides module default)"
+  type        = string
+  default     = null  # uses module default when omitted
+}
