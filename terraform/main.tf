@@ -2,6 +2,15 @@ module "namespaces" {
   source = "./modules/namespaces"
 }
 
+module "observability" {
+  source = "./modules/observability"
+
+  namespace              = module.namespaces.namespace_names["observability"]
+  grafana_admin_password = var.grafana_admin_password
+
+  depends_on = [module.namespaces]
+}
+
 module "database" {
   source = "./modules/database"
 

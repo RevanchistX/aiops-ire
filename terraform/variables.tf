@@ -27,6 +27,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "grafana_admin_password" {
+  description = "Grafana admin user password for the observability stack"
+  type        = string
+  sensitive   = true
+}
+
 variable "chart_version" {
   description = "Bitnami postgresql Helm chart version to pin (overrides module default)"
   type        = string

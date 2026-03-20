@@ -7,3 +7,5 @@ github_repo  = "your-username/aiops-ire"
 db_name     = "aiops"
 db_user     = "aiops"
 db_password = "change-me-strong-password"
+
+grafana_admin_password = "change-me-grafana-password"
