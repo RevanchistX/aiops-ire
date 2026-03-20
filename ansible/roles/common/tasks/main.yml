@@ -1,0 +1,22 @@
+---
+# Base package installation and system prerequisites
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  tags: [common, packages]
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - git
+      - unzip
+      - wget
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - python3-pip
+      - apt-transport-https
+    state: present
+  tags: [common, packages]

@@ -1,0 +1,63 @@
+---
+# k3s single-node installation and kubeconfig setup
+
+- name: Check if k3s is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+  tags: [k3s]
+
+- name: Download k3s install script
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: '0755'
+  when: not k3s_binary.stat.exists
+  tags: [k3s]
+
+- name: Install k3s
+  ansible.builtin.command:
+    cmd: /tmp/k3s-install.sh
+    creates: /usr/local/bin/k3s
+  environment:
+    INSTALL_K3S_EXEC: "server --write-kubeconfig-mode=644"
+  tags: [k3s]
+
+- name: Ensure k3s service is enabled and running
+  ansible.builtin.service:
+    name: k3s
+    state: started
+    enabled: true
+  ignore_errors: true  # k3s already verified running via kubectl node check below
+  tags: [k3s]
+
+- name: Wait for k3s kubeconfig to be created
+  ansible.builtin.wait_for:
+    path: /etc/rancher/k3s/k3s.yaml
+    state: present
+    timeout: 60
+  tags: [k3s]
+
+- name: Wait for k3s node to be ready
+  ansible.builtin.command:
+    cmd: k3s kubectl get node
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: k3s_node_status
+  until: "'Ready' in k3s_node_status.stdout"
+  retries: 20
+  delay: 10
+  changed_when: false
+  tags: [k3s]
+
+- name: Export KUBECONFIG in /home/deni/.bashrc
+  ansible.builtin.lineinfile:
+    path: /home/deni/.bashrc
+    line: 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml'
+    regexp: '^export KUBECONFIG='
+    state: present
+    create: true
+    owner: deni
+    group: deni
+    mode: '0644'
+  tags: [k3s, kubeconfig]

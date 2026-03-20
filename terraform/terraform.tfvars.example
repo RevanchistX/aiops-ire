@@ -1,0 +1,9 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit it.
+
+github_token = "ghp_xxxxxxxxxxxxxxxxxxxx"
+github_repo  = "your-username/aiops-ire"
+
+db_name     = "aiops"
+db_user     = "aiops"
+db_password = "change-me-strong-password"

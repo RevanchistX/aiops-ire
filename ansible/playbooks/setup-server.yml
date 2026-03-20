@@ -1,0 +1,12 @@
+---
+# Full server setup: base packages, k3s, Helm, and kubeconfig
+- name: Setup server
+  hosts: server
+  become: true
+  roles:
+    - role: common
+      tags: [common]
+    - role: k3s
+      tags: [k3s]
+    - role: helm
+      tags: [helm]
