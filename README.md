@@ -7,13 +7,14 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Claude AI](https://img.shields.io/badge/Claude-claude--sonnet--4--20250514-D97706?style=flat-square&logo=anthropic&logoColor=white)](https://anthropic.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://postgresql.org)
+[![Slack](https://img.shields.io/badge/Slack-Block%20Kit-4A154B?style=flat-square&logo=slack&logoColor=white)](https://api.slack.com/block-kit)
 [![License](https://img.shields.io/badge/License-MIT-22C55E?style=flat-square)](LICENSE)
 
 ---
 
 ## Overview
 
-**aiops-ire** is a production-grade, zero-touch incident response platform built on bare Ubuntu Server. When a failure occurs — whether a CPU spike, memory leak, pod crash, or elevated error rate — the system automatically detects the degradation via Prometheus, pulls the relevant logs from Loki, submits the full context to Claude AI for root-cause analysis, persists the incident to PostgreSQL, opens a structured GitHub issue containing a step-by-step remediation runbook, and attempts Kubernetes-native auto-remediation, all without human involvement. The entire pipeline from alert firing to GitHub issue creation completes in under two minutes.
+**aiops-ire** is a production-grade, zero-touch incident response platform built on bare Ubuntu Server. When a failure occurs — whether a CPU spike, memory leak, pod crash, or elevated error rate — the system automatically detects the degradation via Prometheus, pulls the relevant logs from Loki, submits the full context to Claude AI for root-cause analysis, persists the incident to PostgreSQL, opens a structured GitHub issue containing a step-by-step remediation runbook, delivers a formatted Slack notification, and attempts Kubernetes-native auto-remediation, all without human involvement. The entire pipeline from alert firing to GitHub issue and Slack message completes in under two minutes.
 
 ---
 
@@ -60,25 +61,31 @@
   │  │  3. Send alert + logs ──────────────────────────────────────┐  │ │
   │  │  4. Persist incident to PostgreSQL                          │  │ │
   │  │  5. Open GitHub issue with runbook                          │  │ │
-  │  │  6. Attempt auto-remediation (pod restart / rollout)        │  │ │
-  │  │  7. Update remediation result in PostgreSQL                 │  │ │
+  │  │  6. Send Slack Block Kit notification                        │  │ │
+  │  │  7. Attempt auto-remediation (pod restart / rollout)        │  │ │
+  │  │  8. Update remediation result in PostgreSQL                 │  │ │
   │  └──────────────────────────────────────┬──────────────────────┘ │ │
   │                                         │                         │ │
   └─────────────────────────────────────────┼─────────────────────────┘
                                             │
-              ┌─────────────────────────────┼──────────────────────────┐
-              │                             │                          │
-              ▼                             ▼                          ▼
-  ┌─────────────────────┐   ┌──────────────────────────┐   ┌──────────────────┐
-  │  Claude API         │   │  PostgreSQL 16            │   │  GitHub Issues   │
-  │  claude-sonnet-4-   │   │  Namespace: database      │   │  auto-created    │
-  │  20250514           │   │  incidents table (JSONB)  │   │  with runbook    │
-  │                     │   │  Bitnami Helm chart       │   │  + severity tag  │
-  │  • Root cause       │   │  Alembic migrations       │   │                  │
-  │  • Severity rating  │   │                           │   │                  │
-  │  • Runbook steps    │   └──────────────────────────┘   └──────────────────┘
-  │  • Remediation safe │
-  └─────────────────────┘
+        ┌───────────────────────────────────┼──────────────────────────────┐
+        │                   │               │                   │           │
+        ▼                   ▼               ▼                   ▼           │
+  ┌───────────┐   ┌──────────────────┐   ┌──────────────┐   ┌──────────┐  │
+  │ Claude API│   │  PostgreSQL 16   │   │    GitHub    │   │  Slack   │  │
+  │ sonnet-4  │   │  incidents table │   │    Issues    │   │  Block   │  │
+  │           │   │  Alembic migrate │   │  + runbook   │   │  Kit     │  │
+  │ • Root    │   │  Bitnami chart   │   │  + labels    │   │  notify  │  │
+  │   cause   │   └──────────────────┘   └──────────────┘   └──────────┘  │
+  │ • Runbook │                                                             │
+  │ • Safe?   │   ┌──────────────────────────────────────────────────────┐ │
+  └───────────┘   │  Grafana Dashboard  — "AIOps Incident Response"      │ │
+                  │  • Incident history (PostgreSQL)                      │ │
+                  │  • Flask CPU / Memory (Prometheus)                    │ │
+                  │  • Severity pie chart, pod restart stat               │ │
+                  └──────────────────────────────────────────────────────┘ │
+                                                                            │
+  ──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -96,15 +103,34 @@
 | **Alertmanager** | bundled | Alert routing and webhook delivery to aiops-brain |
 | **Loki** | chart 6.55.0 | Log aggregation — queried by aiops-brain for context |
 | **Promtail** | chart 6.17.1 | DaemonSet log shipper → Loki |
-| **Grafana** | bundled | Dashboards for metrics and Loki log exploration |
+| **Grafana** | bundled | "AIOps Incident Response" dashboard: PostgreSQL + Prometheus panels |
 | **PostgreSQL** | 16 (Bitnami chart 17.1.0) | Incident persistence with JSONB columns |
-| **SQLAlchemy + Alembic** | 2.0.36 / 1.14.0 | Async ORM and schema migrations |
+| **SQLAlchemy** | 2.0.36 | Async ORM for incident reads and writes |
+| **Alembic** | 1.14.0 | Schema migrations — run automatically via Kubernetes Job on every deploy |
 | **Flask** | 3.1.0 | Chaos-target microservice with intentionally broken endpoints |
 | **FastAPI** | 0.115.5 | aiops-brain: async webhook receiver and incident orchestrator |
 | **Anthropic Python SDK** | 0.40.0 | Claude API client for log analysis and runbook generation |
 | **Claude claude-sonnet-4-20250514** | — | LLM: root-cause analysis, severity rating, remediation runbook |
 | **PyGithub** | 2.5.0 | GitHub issue creation via REST API |
+| **slack-sdk** | 3.34.0 | Slack Block Kit incident notifications via incoming webhook |
 | **kubernetes** (Python) | 31.0.0 | In-cluster RBAC-backed auto-remediation |
+
+---
+
+## Build Phases
+
+| Phase | What is built |
+|---|---|
+| **Phase 1** | Ansible — k3s + Helm install, OS hardening |
+| **Phase 2** | Terraform — Kubernetes namespaces + PostgreSQL (Bitnami Helm) |
+| **Phase 3** | Terraform — Prometheus, Alertmanager, Loki, Promtail, Grafana |
+| **Phase 4** | Terraform + Docker — Flask chaos-target Deployment (2 replicas) |
+| **Phase 5** | Terraform + Docker — aiops-brain: RBAC, Alembic migration Job, Deployment |
+| **Phase 6** | Chaos scripts — end-to-end pipeline validation |
+| **Phase 7A** | README and architecture diagram |
+| **Phase 7B** | Grafana dashboard — 8-panel "AIOps Incident Response" (PostgreSQL + Prometheus) |
+| **Phase 7C** | Slack notifications — Block Kit messages with severity emoji, root cause, and GitHub issue button |
+| **Phase 7D** | Alembic migration Kubernetes Job — runs `alembic upgrade head` automatically before every deploy |
 
 ---
 
@@ -130,8 +156,12 @@ aiops-ire/
 │       ├── namespaces/        # Phase 2 — five namespaces
 │       ├── database/          # Phase 2 — PostgreSQL via Bitnami Helm
 │       ├── observability/     # Phase 3 — Prometheus, Alertmanager, Loki, Grafana
+│       │   ├── main.tf        #   Helm releases + PostgreSQL datasource
+│       │   ├── alerts.tf      #   PrometheusRule: fast-firing flask-app alerts
+│       │   └── grafana-dashboard.tf  # ConfigMap: AIOps Incident Response dashboard
 │       ├── apps/              # Phase 4 — Flask chaos-target Deployment + Service
-│       └── aiops/             # Phase 5 — aiops-brain: RBAC, Secret, Deployment
+│       └── aiops/             # Phase 5 — aiops-brain RBAC, Secret, Deployment
+│           └── migration-job.tf      # Alembic Kubernetes Job (runs before Deployment)
 │
 ├── src/
 │   ├── aiops-brain/           # Phase 5 — FastAPI incident response service
@@ -139,10 +169,12 @@ aiops-ire/
 │   │   ├── analyzer.py        # Claude API integration
 │   │   ├── loki_client.py     # Loki HTTP query client
 │   │   ├── github_client.py   # GitHub issue creation
-│   │   ├── remediation.py     # kubectl pod restart / rollout restart
+│   │   ├── slack_client.py    # Slack Block Kit notifications
+│   │   ├── remediation.py     # Pod restart / rollout restart via k8s Python client
 │   │   ├── models.py          # SQLAlchemy Incident model
 │   │   ├── database.py        # Async engine and session factory
-│   │   ├── migrations/        # Alembic revisions
+│   │   ├── migrations/        # Alembic revisions (001_initial_incidents.py)
+│   │   ├── alembic.ini
 │   │   ├── Dockerfile
 │   │   └── build-and-load.sh  # Build + import into k3s containerd
 │   │
@@ -180,6 +212,7 @@ aiops-ire/
 | Docker Engine | Required on the server to build images |
 | Anthropic API key | `claude-sonnet-4-20250514` access required |
 | GitHub PAT | `repo` scope — for opening issues |
+| Slack incoming webhook | Optional — create at api.slack.com/apps; omit to disable notifications |
 | SSH access to server | Passwordless key recommended |
 
 ---
@@ -204,14 +237,17 @@ cd terraform
 
 # Copy and populate the variables file
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars — set db_password, grafana_admin_password, etc.
+# Edit terraform.tfvars — set all required values:
+#   db_password, grafana_admin_password, claude_api_key,
+#   github_token, github_repo
+#   slack_webhook_url  (optional — leave as "" to disable Slack)
 
 terraform init
 
 # Namespaces and PostgreSQL
 terraform apply -target=module.namespaces -target=module.database -var-file=terraform.tfvars
 
-# Observability stack (Prometheus, Alertmanager, Loki, Grafana)
+# Observability stack (Prometheus, Alertmanager, Loki, Grafana + dashboard)
 terraform apply -target=module.observability -var-file=terraform.tfvars
 ```
 
@@ -234,19 +270,23 @@ terraform apply -target=module.apps -var-file=terraform.tfvars
 cd src/aiops-brain
 bash build-and-load.sh
 
-# Deploy the full aiops module (RBAC, Secret, Deployment, Service)
+# Deploy the full aiops module:
+#   1. Kubernetes Secret (all env vars)
+#   2. Alembic migration Job (runs alembic upgrade head, blocks until complete)
+#   3. aiops-brain Deployment + Service + RBAC
 cd ../../terraform
 terraform apply -target=module.aiops -var-file=terraform.tfvars
 
-# Verify the pod is running and healthy
+# Verify the migration Job succeeded and the pod is healthy
+kubectl get jobs -n aiops
 kubectl get pods -n aiops
 kubectl logs -n aiops -l app=aiops-brain -f
 ```
 
-### Phase 6 — Inject chaos and observe the pipeline
+### Phase 6 — Inject chaos and observe the full pipeline
 
 ```bash
-# Interactive menu — pick a scenario and watch the pipeline fire
+# Interactive menu — pick a scenario and watch the pipeline fire end-to-end
 bash chaos/inject.sh
 
 # Or run a specific scenario directly
@@ -254,7 +294,26 @@ bash chaos/pod_kill.sh
 bash chaos/cpu_spike.sh
 ```
 
-**Watch for auto-generated incidents at:**
+After injecting chaos, verify all pipeline outputs:
+
+```bash
+# 1. Check Alertmanager fired the alert
+kubectl port-forward -n observability svc/kube-prometheus-stack-alertmanager 9093:9093
+# open http://localhost:9093
+
+# 2. Tail aiops-brain logs to watch the pipeline
+kubectl logs -n aiops -l app=aiops-brain -f
+
+# 3. Query the incidents API
+kubectl port-forward -n aiops svc/aiops-brain 8000:8000
+curl http://localhost:8000/incidents | jq .
+
+# 4. Open Grafana to see the dashboard
+kubectl port-forward -n observability svc/kube-prometheus-stack-grafana 3000:80
+# open http://localhost:3000  (admin / <grafana_admin_password>)
+```
+
+**Watch for auto-generated GitHub issues at:**
 ```
 https://github.com/DeniStojanovski/aiops-ire/issues
 ```
@@ -281,9 +340,11 @@ The pipeline executes the following steps for every alert Alertmanager receives:
 
 **8. GitHub issue creation** — `github_client.py` opens an issue in the configured repository with a formatted Markdown body: incident summary table, root cause, severity assessment, numbered runbook, and a collapsible log excerpt. Severity labels are applied automatically.
 
-**9. Auto-remediation** — `remediation.py` maps the alert name to a remediation strategy using the aiops-brain's Kubernetes ServiceAccount (ClusterRole: `get/list/delete` pods, `get/list/patch` deployments). CrashLoop/OOMKill alerts trigger a pod deletion; high-memory/high-CPU alerts trigger a rolling restart via annotation patch. Claude's `auto_remediation_safe` flag gates execution.
+**9. Slack notification** — `slack_client.py` sends a Block Kit message to the configured webhook URL. The message includes the severity emoji, alert name, service and severity fields, the first 300 characters of Claude's root cause, and a primary-style button linking directly to the GitHub issue.
 
-**10. Result update** — The `remediation_action` and `remediation_result` columns in PostgreSQL are updated with the outcome. The incident record is now complete and queryable via `GET /incidents`.
+**10. Auto-remediation** — `remediation.py` maps the alert name to a remediation strategy using the aiops-brain's Kubernetes ServiceAccount (ClusterRole: `get/list/delete` pods, `get/list/patch` deployments). CrashLoop/OOMKill alerts trigger a pod deletion; high-memory/high-CPU alerts trigger a rolling restart via annotation patch. Claude's `auto_remediation_safe` flag gates execution.
+
+**11. Result update** — The `remediation_action` and `remediation_result` columns in PostgreSQL are updated with the outcome. The incident record is now complete and queryable via `GET /incidents`.
 
 ---
 
@@ -294,8 +355,82 @@ The pipeline executes the following steps for every alert Alertmanager receives:
 | `observability` | Prometheus, Alertmanager, Grafana, Loki, Promtail | Full observability stack |
 | `database` | PostgreSQL 16 (Bitnami) | Persistent incident storage |
 | `apps` | flask-app Deployment (2 replicas) | Chaos injection target |
-| `aiops` | aiops-brain Deployment, RBAC, Secrets | Incident response orchestrator |
+| `aiops` | aiops-brain Deployment, migration Job, RBAC, Secrets | Incident response orchestrator |
 | `chaos` | (reserved) | Chaos tooling and test workloads |
+
+---
+
+## Observability & Dashboards
+
+### Accessing Grafana
+
+```bash
+kubectl port-forward -n observability svc/kube-prometheus-stack-grafana 3000:80
+# open http://localhost:3000
+# username: admin
+# password: <grafana_admin_password from terraform.tfvars>
+```
+
+### AIOps Incident Response Dashboard
+
+The dashboard is provisioned automatically via a Kubernetes ConfigMap with label `grafana_dashboard=1`. The Grafana sidecar detects and loads it on startup. It contains eight panels across four rows:
+
+| Panel | Type | Data source | What it shows |
+|---|---|---|---|
+| Total Incidents | Stat | PostgreSQL | `COUNT(*)` from incidents table, colour-coded by threshold |
+| Auto-Remediation Success Rate | Stat | PostgreSQL | Percentage of incidents where auto-remediation was attempted |
+| Pod Restarts (1h) | Stat | Prometheus | `increase(kube_pod_container_status_restarts_total[1h])` |
+| Incidents by Severity | Pie chart | PostgreSQL | Distribution across critical / warning / info |
+| Incidents over Time | Time series | PostgreSQL | Hourly bar chart for the selected time range |
+| Flask App CPU Usage | Time series | Prometheus | `rate(container_cpu_usage_seconds_total[5m])` per pod |
+| Flask App Memory Usage | Time series | Prometheus | `container_memory_working_set_bytes` per pod, bytes unit |
+| Latest 10 Incidents | Table | PostgreSQL | Alert, severity (colour-coded), service, fired_at, root cause excerpt, GitHub issue link |
+
+The PostgreSQL datasource (`uid: postgresql`) is provisioned directly in the kube-prometheus-stack Helm values alongside Loki, so no manual Grafana configuration is required.
+
+---
+
+## Notifications
+
+### Slack Block Kit
+
+When `SLACK_WEBHOOK_URL` is configured, every processed incident produces a message in the following format:
+
+```
+🔴  FlaskAppPodRestarted
+─────────────────────────────────
+Service       flask-app
+Severity      critical
+Fired At      2026-03-21 14:32:07 UTC
+
+Root Cause
+The flask-app container was force-terminated, triggering an immediate
+restart by the Deployment controller...
+
+[ View GitHub Issue ]  ← primary button
+
+Responded by aiops-brain · powered by Claude AI
+```
+
+Severity emojis: 🔴 critical · 🟡 warning · 🔵 info · ⚪ unknown
+
+The `View GitHub Issue` button is only rendered when a GitHub issue was successfully created. If Slack delivery fails, the error is logged as a warning and the pipeline continues unaffected.
+
+### Configuration
+
+**Terraform (recommended):** add to `terraform.tfvars`:
+
+```hcl
+slack_webhook_url = "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+```
+
+Terraform injects this into the `aiops-brain-env` Kubernetes Secret. Leave it as `""` or omit it entirely to disable Slack notifications without affecting any other pipeline step.
+
+**Local development:** add to `.env`:
+
+```bash
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+```
 
 ---
 
@@ -310,6 +445,7 @@ All variables are injected into the `aiops-brain` pod via a Kubernetes Secret ma
 | `GITHUB_REPO` | aiops-brain | Repository in `owner/repo` format |
 | `DATABASE_URL` | aiops-brain | `postgresql://user:pass@host:5432/aiops` |
 | `LOKI_URL` | aiops-brain | `http://loki.observability.svc.cluster.local:3100` |
+| `SLACK_WEBHOOK_URL` | aiops-brain | Slack incoming webhook URL (optional — omit to disable) |
 
 For local development, export variables from a `.env` file (never committed):
 
@@ -322,13 +458,13 @@ cd src/aiops-brain && uvicorn main:app --reload --port 8080
 
 ## Demo
 
-When a pod-kill chaos event fires, the full pipeline produces a GitHub issue like the following within approximately 90 seconds:
+When a pod-kill chaos event fires, the full pipeline produces a GitHub issue and Slack notification within approximately 90 seconds:
 
 ```
 [CRITICAL] FlaskAppPodRestarted — flask-app
 ```
 
-**Issue body:**
+**GitHub issue body:**
 
 ```markdown
 ## Incident Summary
