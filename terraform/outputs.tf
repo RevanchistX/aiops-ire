@@ -22,3 +22,8 @@ output "flask_app_dns" {
   description = "In-cluster DNS name for the flask-app chaos target Service"
   value       = module.apps.service_dns
 }
+
+output "aiops_brain_webhook_url" {
+  description = "Alertmanager webhook URL pointing at aiops-brain /webhook"
+  value       = module.aiops.webhook_url
+}

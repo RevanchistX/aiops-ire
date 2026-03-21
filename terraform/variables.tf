@@ -38,3 +38,9 @@ variable "chart_version" {
   type        = string
   default     = null  # uses module default when omitted
 }
+
+variable "claude_api_key" {
+  description = "Anthropic API key for aiops-brain Claude claude-sonnet-4-20250514 calls"
+  type        = string
+  sensitive   = true
+}
