@@ -169,6 +169,7 @@ resource "kubernetes_deployment" "aiops_brain" {
   depends_on = [
     kubernetes_service_account.aiops_brain,
     kubernetes_secret.aiops_brain_env,
+    kubernetes_job.aiops_brain_migrate,
   ]
 }
 
