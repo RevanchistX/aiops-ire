@@ -22,3 +22,11 @@ module "database" {
 
   depends_on = [module.namespaces]
 }
+
+module "apps" {
+  source = "./modules/apps"
+
+  namespace = module.namespaces.namespace_names["apps"]
+
+  depends_on = [module.namespaces]
+}

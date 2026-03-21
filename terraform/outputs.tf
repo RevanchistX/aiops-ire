@@ -17,3 +17,8 @@ output "loki_endpoint" {
   description = "In-cluster DNS endpoint for Loki — set as LOKI_URL in aiops-brain"
   value       = module.observability.loki_endpoint
 }
+
+output "flask_app_dns" {
+  description = "In-cluster DNS name for the flask-app chaos target Service"
+  value       = module.apps.service_dns
+}
