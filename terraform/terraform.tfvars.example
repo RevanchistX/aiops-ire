@@ -9,3 +9,8 @@ db_user     = "aiops"
 db_password = "change-me-strong-password"
 
 grafana_admin_password = "change-me-grafana-password"
+
+claude_api_key = "sk-ant-xxxxxxxxxxxxxxxxxxxx"
+
+# Optional — leave empty or omit to disable Slack notifications
+slack_webhook_url = "https://hooks.slack.com/services/XXX/YYY/ZZZ"

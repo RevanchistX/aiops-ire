@@ -27,6 +27,11 @@ resource "helm_release" "kube_prometheus_stack" {
     value = "true"
   }
 
+  set {
+    name  = "grafana.plugins"
+    value = "grafana-postgresql-datasource"
+  }
+
   values = [
     <<-EOT
     prometheus:
@@ -78,6 +83,8 @@ resource "helm_release" "kube_prometheus_stack" {
             memory: "256Mi"
 
     grafana:
+      plugins:
+        - grafana-postgresql-datasource
       # Prometheus datasource is wired automatically by kube-prometheus-stack.
       # Additional datasources: Loki (logs) and PostgreSQL (incident history).
       additionalDataSources:

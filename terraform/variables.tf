@@ -44,3 +44,10 @@ variable "claude_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for incident notifications (optional — omit to disable)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

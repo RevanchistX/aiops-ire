@@ -27,6 +27,7 @@ from github_client import open_issue
 from loki_client import fetch_logs
 from models import Incident
 from remediation import attempt_remediation
+from slack_client import notify_incident
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -170,8 +171,9 @@ async def _process_alert(
       3. Call Claude API for analysis
       4. Persist incident to PostgreSQL
       5. Open GitHub issue
-      6. Attempt auto-remediation
-      7. Update incident in PostgreSQL
+      6. Send Slack notification
+      7. Attempt auto-remediation
+      8. Update incident in PostgreSQL
     """
     alert_name = alert.labels.alertname
     severity = alert.labels.severity
@@ -248,7 +250,18 @@ async def _process_alert(
     incident.github_issue_url = issue_url
     await db.commit()
 
-    # ── 6. Auto-remediation ─────────────────────────────────────────────────
+    # ── 6. Slack notification ───────────────────────────────────────────────
+    logger.info("pipeline alert=%s step=slack_notify", alert_name)
+    await notify_incident(
+        alert_name=alert_name,
+        severity=severity,
+        service=service,
+        fired_at=fired_at,
+        root_cause=root_cause,
+        github_issue_url=issue_url,
+    )
+
+    # ── 7. Auto-remediation ─────────────────────────────────────────────────
     if auto_remediation_safe:
         logger.info("pipeline alert=%s step=remediation", alert_name)
         action, result = await attempt_remediation(
@@ -264,7 +277,7 @@ async def _process_alert(
             alert_name,
         )
 
-    # ── 7. Update remediation result ────────────────────────────────────────
+    # ── 8. Update remediation result ────────────────────────────────────────
     incident.remediation_action = action
     incident.remediation_result = result
     await db.commit()

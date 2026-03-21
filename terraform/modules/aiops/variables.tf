@@ -31,6 +31,13 @@ variable "loki_url" {
   type        = string
 }
 
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for incident notifications (optional — leave empty to disable)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "image" {
   description = "Container image for aiops-brain (must be pre-loaded into k3s via build-and-load.sh)"
   type        = string

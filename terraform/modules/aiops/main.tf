@@ -73,11 +73,12 @@ resource "kubernetes_secret" "aiops_brain_env" {
 
   # kubernetes provider auto-base64-encodes the values
   data = {
-    CLAUDE_API_KEY = var.claude_api_key
-    GITHUB_TOKEN   = var.github_token
-    GITHUB_REPO    = var.github_repo
-    DATABASE_URL   = var.database_url
-    LOKI_URL       = var.loki_url
+    CLAUDE_API_KEY    = var.claude_api_key
+    GITHUB_TOKEN      = var.github_token
+    GITHUB_REPO       = var.github_repo
+    DATABASE_URL      = var.database_url
+    LOKI_URL          = var.loki_url
+    SLACK_WEBHOOK_URL = var.slack_webhook_url
   }
 }
 
