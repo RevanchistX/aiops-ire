@@ -44,3 +44,19 @@ variable "promtail_version" {
   type        = string
   default     = "6.17.1"
 }
+
+variable "db_name" {
+  description = "PostgreSQL database name — used to configure the Grafana PostgreSQL datasource"
+  type        = string
+}
+
+variable "db_user" {
+  description = "PostgreSQL application user — used to configure the Grafana PostgreSQL datasource"
+  type        = string
+}
+
+variable "db_password" {
+  description = "PostgreSQL application user password — injected into Grafana secureJsonData"
+  type        = string
+  sensitive   = true
+}

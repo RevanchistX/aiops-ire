@@ -7,6 +7,9 @@ module "observability" {
 
   namespace              = module.namespaces.namespace_names["observability"]
   grafana_admin_password = var.grafana_admin_password
+  db_name                = var.db_name
+  db_user                = var.db_user
+  db_password            = var.db_password
 
   depends_on = [module.namespaces]
 }

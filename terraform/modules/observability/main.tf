@@ -79,13 +79,35 @@ resource "helm_release" "kube_prometheus_stack" {
 
     grafana:
       # Prometheus datasource is wired automatically by kube-prometheus-stack.
-      # Add Loki as an additional datasource.
+      # Additional datasources: Loki (logs) and PostgreSQL (incident history).
       additionalDataSources:
         - name: Loki
           type: loki
+          uid: loki
           url: http://loki.${var.namespace}.svc.cluster.local:3100
           access: proxy
           isDefault: false
+
+        - name: postgresql
+          type: postgres
+          uid: postgresql
+          url: postgresql.database.svc.cluster.local:5432
+          database: ${var.db_name}
+          user: ${var.db_user}
+          secureJsonData:
+            password: ${var.db_password}
+          jsonData:
+            sslmode: disable
+            postgresVersion: 1600
+            timescaledb: false
+
+      # Sidecar watches for ConfigMaps labelled grafana_dashboard=1 in all namespaces
+      sidecar:
+        dashboards:
+          enabled: true
+          label: grafana_dashboard
+          labelValue: "1"
+          searchNamespace: ALL
       resources:
         requests:
           cpu: "100m"
