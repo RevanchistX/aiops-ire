@@ -16,6 +16,17 @@ resource "helm_release" "kube_prometheus_stack" {
     value = var.grafana_admin_password
   }
 
+  # Silence noisy default alerts that are not real incidents
+  set {
+    name  = "defaultRules.disabled.InfoInhibitor"
+    value = "true"
+  }
+
+  set {
+    name  = "defaultRules.disabled.Watchdog"
+    value = "true"
+  }
+
   values = [
     <<-EOT
     prometheus:
