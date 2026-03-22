@@ -47,3 +47,28 @@ module "aiops" {
 
   depends_on = [module.namespaces, module.database, module.observability]
 }
+
+module "cryptoflux" {
+  source = "./modules/cryptoflux"
+
+  namespace = module.namespaces.namespace_names["cryptoflux"]
+
+  cf_db_name   = var.cf_db_name
+  cf_db_user   = var.cf_db_user
+  cf_db_pass   = var.cf_db_pass
+
+  cf_dr_db_name = var.cf_dr_db_name
+  cf_dr_db_user = var.cf_dr_db_user
+  cf_dr_db_pass = var.cf_dr_db_pass
+
+  cf_secret_key           = var.cf_secret_key
+  cf_trading_data_api_key = var.cf_trading_data_api_key
+  cf_ext_api_key          = var.cf_ext_api_key
+
+  cf_interval_seconds      = var.cf_interval_seconds
+  cf_batch_size            = var.cf_batch_size
+  cf_retention_days        = var.cf_retention_days
+  cf_sync_interval_seconds = var.cf_sync_interval_seconds
+
+  depends_on = [module.namespaces]
+}

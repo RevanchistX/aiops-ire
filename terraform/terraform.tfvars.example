@@ -14,3 +14,20 @@ claude_api_key = "sk-ant-xxxxxxxxxxxxxxxxxxxx"
 
 # Optional — leave empty or omit to disable Slack notifications
 slack_webhook_url = "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+
+# ─── CryptoFlux ───────────────────────────────────────────────────────────────
+# Defaults (cf_db_name, cf_db_user, cf_dr_db_name, cf_dr_db_user) match the
+# hardcoded names in the init SQL files — change only if you patch the SQL too.
+
+cf_db_pass    = "change-me-cryptoflux-password"
+cf_dr_db_pass = "change-me-dr-password"
+
+cf_secret_key           = "change-me-flask-secret-key"
+cf_trading_data_api_key = "change-me-trading-data-api-key"
+cf_ext_api_key          = "change-me-ext-api-key"
+
+# Worker tuning — defaults are fine for most deployments
+# cf_interval_seconds      = 300
+# cf_batch_size            = 100
+# cf_retention_days        = 1
+# cf_sync_interval_seconds = 300

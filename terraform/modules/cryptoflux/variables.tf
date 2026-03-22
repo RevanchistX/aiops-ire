@@ -1,58 +1,9 @@
-variable "github_token" {
-  description = "GitHub personal access token with repo scope for issue creation"
-  type        = string
-  sensitive   = true
-}
-
-variable "github_repo" {
-  description = "GitHub repository in owner/repo format (e.g. acme/aiops-ire)"
+variable "namespace" {
+  description = "Kubernetes namespace to deploy CryptoFlux into"
   type        = string
 }
 
-variable "db_name" {
-  description = "PostgreSQL database name for the aiops incidents store"
-  type        = string
-  default     = "aiops"
-}
-
-variable "db_user" {
-  description = "PostgreSQL application user name"
-  type        = string
-  default     = "aiops"
-}
-
-variable "db_password" {
-  description = "PostgreSQL application user password"
-  type        = string
-  sensitive   = true
-}
-
-variable "grafana_admin_password" {
-  description = "Grafana admin user password for the observability stack"
-  type        = string
-  sensitive   = true
-}
-
-variable "chart_version" {
-  description = "Bitnami postgresql Helm chart version to pin (overrides module default)"
-  type        = string
-  default     = null  # uses module default when omitted
-}
-
-variable "claude_api_key" {
-  description = "Anthropic API key for aiops-brain Claude claude-sonnet-4-20250514 calls"
-  type        = string
-  sensitive   = true
-}
-
-variable "slack_webhook_url" {
-  description = "Slack incoming webhook URL for incident notifications (optional — omit to disable)"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-# ─── CryptoFlux ───────────────────────────────────────────────────────────────
+# ─── Primary PostgreSQL ────────────────────────────────────────────────────────
 
 variable "cf_db_name" {
   description = "PostgreSQL database name for CryptoFlux primary"
@@ -72,6 +23,8 @@ variable "cf_db_pass" {
   sensitive   = true
 }
 
+# ─── DR PostgreSQL ─────────────────────────────────────────────────────────────
+
 variable "cf_dr_db_name" {
   description = "PostgreSQL database name for CryptoFlux DR replica"
   type        = string
@@ -90,6 +43,8 @@ variable "cf_dr_db_pass" {
   sensitive   = true
 }
 
+# ─── Application secrets ───────────────────────────────────────────────────────
+
 variable "cf_secret_key" {
   description = "Flask SECRET_KEY for trading-ui session signing"
   type        = string
@@ -107,6 +62,8 @@ variable "cf_ext_api_key" {
   type        = string
   sensitive   = true
 }
+
+# ─── Worker tuning ────────────────────────────────────────────────────────────
 
 variable "cf_interval_seconds" {
   description = "data-ingestion polling interval in seconds"
@@ -127,7 +84,7 @@ variable "cf_retention_days" {
 }
 
 variable "cf_sync_interval_seconds" {
-  description = "dr-sync replication interval in seconds (RPO target: < 5 min)"
+  description = "dr-sync replication interval in seconds (RPO target)"
   type        = number
   default     = 300
 }

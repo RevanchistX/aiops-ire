@@ -5,6 +5,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 A self-healing infrastructure platform on bare Ubuntu Server. When failures occur, the system automatically detects them, pulls logs, analyzes root cause via Claude API, persists the incident to PostgreSQL, opens a GitHub issue with a remediation runbook, and attempts auto-remediation — zero human involvement.
 
+## Current Phase
+**Phase 8A — Deploy CryptoFlux to k3s**
+
+## Completed Phases
+- Phase 1: Ansible server setup ✓
+- Phase 2: Terraform namespaces + PostgreSQL ✓
+- Phase 3: Observability stack ✓
+- Phase 4: Flask chaos target apps ✓
+- Phase 5: aiops-brain AI pipeline ✓
+- Phase 6: Chaos injection scripts ✓
+- Phase 7A: README + architecture diagram ✓
+- Phase 7B: Grafana dashboard ✓
+- Phase 7C: Slack notifications ✓
+- Phase 7D: Alembic migration Job ✓
+
 ## Full Stack
 - Ansible → k3s + Helm + OS hardening
 - Terraform (providers: kubernetes, helm, postgresql, github) → all k8s resources
@@ -16,6 +31,10 @@ A self-healing infrastructure platform on bare Ubuntu Server. When failures occu
 - Claude API claude-sonnet-4-20250514 → log analysis + runbook generation
 - GitHub API → auto issue creation
 - Chaos scripts → CPU spike, memory leak, disk fill, network drop, pod kill
+- CryptoFlux trading platform (Flask, Python)
+- PostgreSQL primary + DR replica (CryptoFlux data)
+- dr_sync_service (Python worker, syncs every 5min)
+- data_ingestion_service (Python worker, transaction ingestion)
 
 ## Architecture Flow
 ```
@@ -30,6 +49,36 @@ Chaos injects failure
   → remediation result updated in PostgreSQL
   → Grafana reflects new incident in real time
 ```
+
+## CryptoFlux Architecture
+Services deployed to `cryptoflux` namespace:
+
+| Service | Port | Description |
+|---|---|---|
+| trading-ui | 5000 | Frontend trading interface |
+| trading-data | 7100 | Market data API |
+| ext-api | 8000 | External API gateway |
+| liquidity-calc | 8001 | Liquidity calculation service |
+| data-ingestion | — | Background worker, transaction ingestion |
+| dr-sync | — | Background worker, DR sync every 5min |
+| postgresql-primary | 5432 | Primary PostgreSQL instance |
+| postgresql-dr | 5432 | DR replica PostgreSQL instance |
+
+**RTO/RPO targets:**
+- RPO: < 5 minutes (dr_sync interval)
+- RTO: < 2 minutes (manual promotion with runbook)
+
+**Source repo:** https://github.com/BeyondMachines/ceaao2025-cryptoflux
+**Cloned at:** ~/ceaao2025-cryptoflux
+
+## Security Monitoring (Planned - Phase 8B)
+aiops-brain will detect:
+- SQL injection patterns in trading-ui logs
+- XSS attempts
+- Hardcoded secret usage
+- Suspicious loan amounts from liquidity-calc
+- Transaction ingestion gaps (data-ingestion stopped)
+- DR sync lag > 10 minutes
 
 ## Build Phases (sequential — do not skip)
 1. **Ansible** — server setup, k3s, Helm, OS hardening
@@ -92,6 +141,9 @@ docker save aiops-brain:latest | sudo k3s ctr images import -
 
 docker build -t flask-app:latest src/flask-apps/
 docker save flask-app:latest | sudo k3s ctr images import -
+
+# Build and load all CryptoFlux images
+cd src/cryptoflux && bash build-and-load-all.sh
 ```
 
 ### Chaos injection
@@ -107,10 +159,36 @@ bash chaos/inject.sh
 ## Codebase Layout
 - `ansible/roles/` — three roles: `common` (base packages), `k3s` (k3s install), `helm` (Helm install)
 - `terraform/modules/` — one module per Terraform build phase (namespaces, database, observability, apps, aiops)
-- `kubernetes/` — raw manifests organized by concern (namespaces, database, observability, apps, aiops, chaos); referenced by Terraform via `file()`
+- `kubernetes/` — directory structure exists but is currently empty; all manifests are embedded inline in Terraform HCL (not via `file()`)
 - `src/aiops-brain/` — FastAPI app; `migrations/` holds Alembic revisions
 - `src/flask-apps/` — Flask chaos-target microservices
-- `chaos/` — shell scripts for each failure scenario
+- `src/cryptoflux/` — does not exist yet; will be populated in Phase 8A from `~/ceaao2025-cryptoflux`
+- `chaos/` — shell scripts for each failure scenario; `_common.sh` has shared kubectl helpers used by all scripts
+
+## aiops-brain Modules
+Each file has a single responsibility:
+
+| File | Responsibility |
+|---|---|
+| `main.py` | FastAPI app; three endpoints: `POST /webhook`, `GET /health`, `GET /incidents` |
+| `analyzer.py` | Claude API call — sends alert + logs, returns root cause + runbook |
+| `loki_client.py` | Queries Loki HTTP API for last 10 min of logs for the affected service |
+| `github_client.py` | Creates GitHub issue with Claude's runbook via PyGithub |
+| `slack_client.py` | Sends Block Kit notification to Slack with incident summary |
+| `remediation.py` | Attempts auto-remediation via Kubernetes Python client (pod restart, rollout) |
+| `models.py` | SQLAlchemy `Incident` ORM model |
+| `database.py` | SQLAlchemy async engine + session factory |
+
+## Terraform Dependency Graph
+Modules must apply in this order (enforced via `depends_on`):
+```
+namespaces
+  ├─→ database      (depends on namespaces)
+  ├─→ observability (depends on namespaces)
+  ├─→ apps          (depends on namespaces)
+  └─→ aiops         (depends on namespaces + database + observability)
+```
+Always `terraform apply -target=module.namespaces` first on a fresh cluster.
 
 ## Tool Responsibilities
 - **Ansible**: server configuration only — never application logic
@@ -124,6 +202,16 @@ bash chaos/inject.sh
 - Resource requests AND limits required on every container
 - Liveness and readiness probes required on every Deployment
 - kubeconfig at `/etc/rancher/k3s/k3s.yaml`
+
+### Namespaces
+
+| Namespace | Purpose |
+|---|---|
+| aiops | aiops-brain AI pipeline |
+| observability | Prometheus, Alertmanager, Loki, Grafana |
+| apps | Flask chaos-target microservices |
+| database | PostgreSQL (incident persistence) |
+| cryptoflux | CryptoFlux trading platform (8 services) |
 
 ## Database Schema
 ```

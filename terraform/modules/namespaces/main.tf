@@ -1,5 +1,5 @@
 locals {
-  namespaces = ["observability", "database", "apps", "aiops", "chaos"]
+  namespaces = ["observability", "database", "apps", "aiops", "chaos", "cryptoflux"]
 }
 
 resource "kubernetes_namespace" "this" {
