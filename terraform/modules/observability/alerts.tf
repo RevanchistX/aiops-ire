@@ -88,3 +88,91 @@ resource "kubernetes_manifest" "flask_app_alerts" {
 
   depends_on = [helm_release.kube_prometheus_stack]
 }
+
+# ─── CryptoFlux PrometheusRules ────────────────────────────────────────────────
+# Infrastructure-level alerts for the CryptoFlux trading platform.
+# Log-based security detection is handled separately by aiops-brain security_monitor.py.
+
+resource "kubernetes_manifest" "cryptoflux_alerts" {
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "PrometheusRule"
+
+    metadata = {
+      name      = "cryptoflux-alerts"
+      namespace = var.namespace
+      labels = {
+        release    = "kube-prometheus-stack"
+        managed-by = "terraform"
+      }
+    }
+
+    spec = {
+      groups = [
+        {
+          name = "cryptoflux"
+          rules = [
+
+            # ── 1. Transaction ingestion gap ───────────────────────────────
+            # Fires when the data-ingestion container has not been ready for
+            # 15 minutes — a strong proxy for ingestion stall when no custom
+            # metric is available.
+            {
+              alert = "CryptoFluxTransactionGap"
+              expr  = "kube_pod_container_status_ready{namespace=\"cryptoflux\", container=\"data-ingestion\"} == 0"
+              for   = "15m"
+              labels = {
+                severity  = "critical"
+                service   = "data-ingestion"
+                namespace = "cryptoflux"
+              }
+              annotations = {
+                summary     = "CryptoFlux data-ingestion not ready for 15 minutes"
+                description = "The data-ingestion container has not been in ready state for 15 minutes — transaction ingestion may have stalled (pod: {{ $labels.pod }})."
+              }
+            },
+
+            # ── 2. DR sync pod restarting ──────────────────────────────────
+            # Fires as soon as the dr-sync container restarts — any restart
+            # introduces a replication gap that may breach the 5-minute RPO.
+            {
+              alert = "CryptoFluxDRSyncFailed"
+              expr  = "increase(kube_pod_container_status_restarts_total{namespace=\"cryptoflux\", container=\"dr-sync\"}[5m]) > 0"
+              for   = "1m"
+              labels = {
+                severity  = "warning"
+                service   = "dr-sync"
+                namespace = "cryptoflux"
+              }
+              annotations = {
+                summary     = "CryptoFlux DR sync pod restarting"
+                description = "The dr-sync container restarted at least once in the last 5 minutes — DR replication may be interrupted, breaching the 5-minute RPO target."
+              }
+            },
+
+            # ── 3. Any CryptoFlux pod not running ─────────────────────────
+            # Catches unexpected pod failures across all CryptoFlux services.
+            # Excludes completed Jobs (data-ingestion, dr-sync run as workers).
+            {
+              alert = "CryptoFluxPodDown"
+              expr  = "kube_pod_container_status_running{namespace=\"cryptoflux\"} == 0"
+              for   = "2m"
+              labels = {
+                severity  = "critical"
+                service   = "cryptoflux"
+                namespace = "cryptoflux"
+              }
+              annotations = {
+                summary     = "CryptoFlux container not running"
+                description = "Container {{ $labels.container }} in pod {{ $labels.pod }} (namespace cryptoflux) has not been running for 2 minutes."
+              }
+            },
+
+          ]
+        }
+      ]
+    }
+  }
+
+  depends_on = [helm_release.kube_prometheus_stack]
+}

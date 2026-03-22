@@ -1114,3 +1114,60 @@ resource "kubernetes_deployment" "dr_sync" {
     }
   }
 }
+
+# ─── Security scan CronJob ────────────────────────────────────────────────────
+# Triggers the aiops-brain /security-scan endpoint every 5 minutes.
+# Uses Forbid concurrency so a slow scan never overlaps with the next run.
+
+resource "kubernetes_cron_job_v1" "security_scan" {
+  metadata {
+    name      = "security-scan"
+    namespace = var.namespace
+    labels    = { managed-by = "terraform" }
+  }
+
+  spec {
+    schedule                      = "*/5 * * * *"
+    concurrency_policy            = "Forbid"
+    failed_jobs_history_limit     = 3
+    successful_jobs_history_limit = 1
+
+    job_template {
+      metadata {
+        labels = { managed-by = "terraform" }
+      }
+
+      spec {
+        template {
+          metadata {
+            labels = { app = "security-scan" }
+          }
+
+          spec {
+            restart_policy = "OnFailure"
+
+            container {
+              name  = "curl"
+              image = "curlimages/curl:8.5.0"
+              command = [
+                "curl", "-sf", "-X", "POST",
+                "http://aiops-brain.aiops.svc.cluster.local:8000/security-scan",
+              ]
+
+              resources {
+                requests = {
+                  cpu    = "10m"
+                  memory = "16Mi"
+                }
+                limits = {
+                  cpu    = "50m"
+                  memory = "32Mi"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

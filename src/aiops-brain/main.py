@@ -5,9 +5,11 @@ Claude API, persists to PostgreSQL, opens a GitHub issue, and attempts
 Kubernetes auto-remediation — all with zero human involvement.
 
 Endpoints:
-  POST /webhook   — Alertmanager webhook receiver
-  GET  /health    — liveness / readiness probe
-  GET  /incidents — last 20 incidents (JSON)
+  POST /webhook        — Alertmanager webhook receiver
+  GET  /health         — liveness / readiness probe
+  GET  /incidents      — last 20 incidents (JSON)
+  POST /security-scan  — trigger CryptoFlux security scan
+  GET  /security-events — last 50 security scan incidents (JSON)
 """
 
 import logging
@@ -27,6 +29,8 @@ from github_client import open_issue
 from loki_client import fetch_logs
 from models import Incident
 from remediation import attempt_remediation
+import security_monitor
+from security_monitor import SecurityEvent
 from slack_client import notify_incident
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
@@ -288,4 +292,125 @@ async def _process_alert(
         incident.id,
         issue_url,
         action,
+    )
+
+
+# ─── Security scan endpoints ───────────────────────────────────────────────────
+
+@app.post("/security-scan", status_code=202)
+async def security_scan(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Trigger a CryptoFlux security scan in the background.
+
+    Scans the last 15 minutes of Loki logs for all CryptoFlux services.
+    Each detected SecurityEvent is persisted, Slacked, and filed as a
+    GitHub issue. Returns 202 immediately so the CronJob curl doesn't block.
+    """
+    logger.info("endpoint=/security-scan accepted")
+    background_tasks.add_task(_run_security_scan, db)
+    return {"status": "accepted"}
+
+
+@app.get("/security-events", response_model=list[IncidentResponse])
+async def list_security_events(db: AsyncSession = Depends(get_db)) -> list[Incident]:
+    """Return the 50 most recent security-scan incidents, newest first."""
+    logger.info("endpoint=/security-events")
+    result = await db.execute(
+        select(Incident)
+        .where(Incident.alert_name.like("SecurityScan:%"))
+        .order_by(desc(Incident.created_at))
+        .limit(50)
+    )
+    return list(result.scalars().all())
+
+
+# ─── Security pipeline ────────────────────────────────────────────────────────
+
+async def _run_security_scan(db: AsyncSession) -> None:
+    """Run the full security scan and process every detected event."""
+    logger.info("security_scan step=start")
+    try:
+        events = await security_monitor.scan_all()
+    except Exception as exc:
+        logger.error("security_scan step=scan_all error=%s", exc)
+        return
+
+    for event in events:
+        try:
+            await _process_security_event(event, db)
+        except Exception as exc:
+            logger.error(
+                "security_scan step=process_event type=%s error=%s",
+                event.event_type, exc,
+            )
+
+    logger.info("security_scan step=done events_processed=%d", len(events))
+
+
+async def _process_security_event(event: SecurityEvent, db: AsyncSession) -> None:
+    """Persist a SecurityEvent to PostgreSQL, open a GitHub issue, and notify Slack.
+
+    Steps mirror the regular alert pipeline but skip Claude analysis and
+    auto-remediation — security events require human review.
+    """
+    now = datetime.now(tz=timezone.utc)
+
+    logger.info(
+        "security_event step=start type=%s severity=%s service=%s",
+        event.event_type, event.severity, event.service,
+    )
+
+    # ── 1. Persist ──────────────────────────────────────────────────────────
+    incident = Incident(
+        alert_name=event.event_type,
+        severity=event.severity,
+        service=event.service,
+        fired_at=now.replace(tzinfo=None),
+        raw_alert={},
+        logs_snapshot=event.evidence,
+        claude_analysis="Security scan — no Claude analysis performed",
+        root_cause=event.description,
+        runbook=(
+            "## Security Remediation\n\n"
+            "1. Review the evidence logs attached to this incident.\n"
+            "2. Identify the source IP and user account.\n"
+            "3. Patch or remove the vulnerable endpoint.\n"
+            "4. Rotate any exposed credentials.\n"
+            "5. Verify no data exfiltration occurred."
+        ),
+    )
+    db.add(incident)
+    await db.commit()
+    await db.refresh(incident)
+    logger.info("security_event step=persisted incident_id=%s", incident.id)
+
+    # ── 2. GitHub issue ─────────────────────────────────────────────────────
+    issue_url = await open_issue(
+        alert_name=event.event_type,
+        severity=event.severity,
+        service=event.service,
+        fired_at=now,
+        root_cause=event.description,
+        runbook=incident.runbook,
+        severity_assessment=f"Security event classified as {event.severity} by aiops-brain security scanner",
+        logs_snapshot=event.evidence,
+    )
+    incident.github_issue_url = issue_url
+    await db.commit()
+
+    # ── 3. Slack notification ───────────────────────────────────────────────
+    await notify_incident(
+        alert_name=event.event_type,
+        severity=event.severity,
+        service=event.service,
+        fired_at=now,
+        root_cause=event.description,
+        github_issue_url=issue_url,
+    )
+
+    logger.info(
+        "security_event step=done type=%s incident_id=%s issue=%s",
+        event.event_type, incident.id, issue_url,
     )
