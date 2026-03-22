@@ -32,7 +32,7 @@ resource "kubernetes_config_map" "grafana_dashboard_aiops" {
         "version": 1,
         "refresh": "30s",
         "timezone": "browser",
-        "time": { "from": "now-24h", "to": "now" },
+        "time": { "from": "now-7d", "to": "now" },
         "timepicker": {},
         "tags": ["aiops", "incidents", "self-healing"],
         "editable": true,
@@ -58,7 +58,7 @@ resource "kubernetes_config_map" "grafana_dashboard_aiops" {
             "type": "stat",
             "title": "Total Incidents",
             "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
-            "datasource": { "type": "postgres", "uid": "postgresql" },
+            "datasource": "postgresql",
             "targets": [
               {
                 "refId": "A",
@@ -102,7 +102,7 @@ resource "kubernetes_config_map" "grafana_dashboard_aiops" {
             "type": "stat",
             "title": "Auto-Remediation Success Rate",
             "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
-            "datasource": { "type": "postgres", "uid": "postgresql" },
+            "datasource": "postgresql",
             "targets": [
               {
                 "refId": "A",
@@ -192,7 +192,7 @@ resource "kubernetes_config_map" "grafana_dashboard_aiops" {
             "type": "piechart",
             "title": "Incidents by Severity",
             "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
-            "datasource": { "type": "postgres", "uid": "postgresql" },
+            "datasource": "postgresql",
             "targets": [
               {
                 "refId": "A",
@@ -237,7 +237,7 @@ resource "kubernetes_config_map" "grafana_dashboard_aiops" {
             "type": "timeseries",
             "title": "Incidents over Time",
             "gridPos": { "x": 8, "y": 4, "w": 16, "h": 8 },
-            "datasource": { "type": "postgres", "uid": "postgresql" },
+            "datasource": "postgresql",
             "targets": [
               {
                 "refId": "A",
@@ -413,7 +413,7 @@ resource "kubernetes_config_map" "grafana_dashboard_aiops" {
             "type": "table",
             "title": "Latest 10 Incidents",
             "gridPos": { "x": 0, "y": 20, "w": 24, "h": 10 },
-            "datasource": { "type": "postgres", "uid": "postgresql" },
+            "datasource": "postgresql",
             "targets": [
               {
                 "refId": "A",

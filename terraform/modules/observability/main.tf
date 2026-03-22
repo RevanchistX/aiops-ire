@@ -104,9 +104,10 @@ resource "helm_release" "kube_prometheus_stack" {
           secureJsonData:
             password: ${var.db_password}
           jsonData:
-            sslmode: disable
+            sslmode: "disable"
             postgresVersion: 1600
             timescaledb: false
+            database: ${var.db_name}
 
       # Sidecar watches for ConfigMaps labelled grafana_dashboard=1 in all namespaces
       sidecar:
