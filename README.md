@@ -16,6 +16,12 @@
 
 **aiops-ire** is a production-grade, zero-touch incident response platform built on bare Ubuntu Server. When a failure occurs — whether a CPU spike, memory leak, pod crash, or elevated error rate — the system automatically detects the degradation via Prometheus, pulls the relevant logs from Loki, submits the full context to Claude AI for root-cause analysis, persists the incident to PostgreSQL, opens a structured GitHub issue containing a step-by-step remediation runbook, delivers a formatted Slack notification, and attempts Kubernetes-native auto-remediation, all without human involvement. The entire pipeline from alert firing to GitHub issue and Slack message completes in under two minutes.
 
+Phase 8 extends the platform with **CryptoFlux** — an intentionally vulnerable eight-service trading platform — and a **security monitoring pipeline** that scans Loki logs every five minutes and auto-detects SQL injection, XSS, info-leak endpoint access, hardcoded secrets, transaction ingestion gaps, and DR sync failures, routing each finding through the same GitHub + Slack pipeline.
+
+---
+
+> **Current Phase:** Phase 8B Complete — CryptoFlux Security Monitoring
+
 ---
 
 ## Architecture
@@ -25,67 +31,60 @@
 │                         aiops-ire  —  Full Pipeline                         │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-  ┌──────────────┐   HTTP /cpu          ┌─────────────────────────────────┐
-  │ chaos/       │   /memory /error     │  Namespace: apps                │
-  │ inject.sh    │ ──────────────────▶  │  flask-app  (2 replicas)        │
-  │              │   kubectl exec       │  Flask 3.1  +  prometheus-client│
-  └──────────────┘   pod-kill           └────────────┬────────────────────┘
-                                                     │ metrics scrape :5000
-                                                     ▼
-  ┌──────────────────────────────────────────────────────────────────────────┐
-  │  Namespace: observability                                                │
-  │                                                                          │
-  │  ┌─────────────────┐   PrometheusRule    ┌──────────────────────────┐   │
-  │  │   Prometheus    │ ◀───────────────── │  flask-app-alerts        │   │
-  │  │   (kube-prom    │                    │  FlaskAppHighCPU    1m   │   │
-  │  │    stack)       │  alert fires       │  FlaskAppPodRestarted 30s│   │
-  │  └────────┬────────┘ ──────────────────▶│  FlaskAppHighErrorRate30s│   │
-  │           │                             └──────────────────────────┘   │
-  │           ▼ webhook POST /webhook                                        │
-  │  ┌─────────────────┐   Loki LogQL      ┌─────────────────────────────┐ │
-  │  │  Alertmanager   │                   │  Loki  (single-binary)      │ │
-  │  └────────┬────────┘                   │  Promtail DaemonSet         │ │
-  │           │                            └─────────────────────────────┘ │
-  │           │ POST /webhook                           ▲                   │
-  └───────────┼─────────────────────────────────────────┼───────────────────┘
-              │                                         │ logs query
-              ▼                                         │
-  ┌───────────────────────────────────────────────────────────────────────┐
-  │  Namespace: aiops                                                     │
-  │                                                                       │
-  │  ┌─────────────────────────────────────────────────────────────────┐ │
-  │  │  aiops-brain  (FastAPI)                                         │ │
-  │  │                                                                 │ │
-  │  │  1. Extract alert metadata (name, severity, service)           │ │
-  │  │  2. Query Loki → last 10 min of logs                           │ │
-  │  │  3. Send alert + logs ──────────────────────────────────────┐  │ │
-  │  │  4. Persist incident to PostgreSQL                          │  │ │
-  │  │  5. Open GitHub issue with runbook                          │  │ │
-  │  │  6. Send Slack Block Kit notification                        │  │ │
-  │  │  7. Attempt auto-remediation (pod restart / rollout)        │  │ │
-  │  │  8. Update remediation result in PostgreSQL                 │  │ │
-  │  └──────────────────────────────────────┬──────────────────────┘ │ │
-  │                                         │                         │ │
-  └─────────────────────────────────────────┼─────────────────────────┘
-                                            │
-        ┌───────────────────────────────────┼──────────────────────────────┐
-        │                   │               │                   │           │
-        ▼                   ▼               ▼                   ▼           │
-  ┌───────────┐   ┌──────────────────┐   ┌──────────────┐   ┌──────────┐  │
-  │ Claude API│   │  PostgreSQL 16   │   │    GitHub    │   │  Slack   │  │
-  │ sonnet-4  │   │  incidents table │   │    Issues    │   │  Block   │  │
-  │           │   │  Alembic migrate │   │  + runbook   │   │  Kit     │  │
-  │ • Root    │   │  Bitnami chart   │   │  + labels    │   │  notify  │  │
-  │   cause   │   └──────────────────┘   └──────────────┘   └──────────┘  │
-  │ • Runbook │                                                             │
-  │ • Safe?   │   ┌──────────────────────────────────────────────────────┐ │
-  └───────────┘   │  Grafana Dashboard  — "AIOps Incident Response"      │ │
-                  │  • Incident history (PostgreSQL)                      │ │
-                  │  • Flask CPU / Memory (Prometheus)                    │ │
-                  │  • Severity pie chart, pod restart stat               │ │
-                  └──────────────────────────────────────────────────────┘ │
-                                                                            │
-  ──────────────────────────────────────────────────────────────────────────┘
+ CHAOS PIPELINE                          SECURITY PIPELINE
+ ─────────────────────────────────────   ────────────────────────────────────
+  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────────────────┐
+  │ chaos/       │  │ Namespace: apps  │  │ Namespace: cryptoflux        │
+  │ inject.sh    │─▶│ flask-app        │  │ trading-ui    :30500 (ext)   │
+  │ cpu/mem/disk │  │ (2 replicas)     │  │ trading-data  :7100          │
+  │ net/pod-kill │  │ Flask 3.1        │  │ ext-api       :8000          │
+  └──────────────┘  │ prom-client      │  │ liquidity-calc :8001         │
+                    └────────┬─────────┘  │ data-ingestion (worker)      │
+                             │ metrics    │ dr-sync        (worker)      │
+                             ▼            │ postgresql-primary  :5432    │
+  ┌──────────────────────────────────────┐│ postgresql-dr       :5432    │
+  │  Namespace: observability            ││ (DR replica — RPO < 5 min)  │
+  │                                      ││                              │
+  │  Prometheus ──  PrometheusRules      ││ CronJob: security-scan ────┐ │
+  │   flask-app-alerts   (3 rules)       ││ POST /security-scan        │ │
+  │   cryptoflux-alerts  (3 rules)       ││ every 5 minutes            │ │
+  │                                      │└────────────────────────────┼─┘
+  │  Alertmanager                        │                             │
+  │  Loki + Promtail DaemonSet           │                             │
+  └──────┬───────────────────┬───────────┘                             │
+         │ POST /webhook     │ logs query  ◀───────────────────────────┘
+         ▼                   ▼              POST /security-scan
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │  Namespace: aiops                                                    │
+  │  ┌────────────────────────────────────────────────────────────────┐ │
+  │  │  aiops-brain  (FastAPI)                                        │ │
+  │  │                                                                │ │
+  │  │  POST /webhook pipeline:          POST /security-scan:         │ │
+  │  │  1. extract alert metadata        security_monitor.py          │ │
+  │  │  2. Loki → last 10 min logs       Loki → last 15 min logs      │ │
+  │  │  3. Claude → root cause+runbook   SQLi · XSS · InfoLeak        │ │
+  │  │  4. persist → PostgreSQL          HardcodedSecret · TxGap · DR │ │
+  │  │  5. open GitHub issue             persist + GitHub + Slack      │ │
+  │  │  6. Slack Block Kit notify        (no Claude, human review)    │ │
+  │  │  7. auto-remediation                                           │ │
+  │  │  8. update PostgreSQL result                                   │ │
+  │  └───────────────────────────────┬────────────────────────────────┘ │
+  └──────────────────────────────────┼───────────────────────────────────┘
+                    ┌────────────────┼──────────────────┐
+                    │                │                  │
+                    ▼                ▼                  ▼
+           ┌─────────────┐  ┌──────────────────┐  ┌──────────────┐
+           │  Claude API │  │  PostgreSQL 16   │  │    GitHub    │
+           │  sonnet-4   │  │  incidents table │  │    Issues    │
+           │  • root cause│  │  Alembic migrate│  │  + runbooks  │
+           │  • runbook  │  │  Bitnami chart  │  │  + labels    │
+           │  • safe?    │  └──────────────────┘  └──────────────┘
+           └─────────────┘
+           ┌──────────┐  ┌──────────────────────────────────────────────┐
+           │  Slack   │  │  Grafana — "AIOps Incident Response"         │
+           │  Block   │  │  Incident history (PostgreSQL)               │
+           │  Kit     │  │  Flask CPU / Memory (Prometheus)             │
+           └──────────┘  └──────────────────────────────────────────────┘
 ```
 
 ---
@@ -114,6 +113,9 @@
 | **PyGithub** | 2.5.0 | GitHub issue creation via REST API |
 | **slack-sdk** | 3.34.0 | Slack Block Kit incident notifications via incoming webhook |
 | **kubernetes** (Python) | 31.0.0 | In-cluster RBAC-backed auto-remediation |
+| **CryptoFlux** (Flask, Python) | — | Intentionally vulnerable 8-service trading platform (Phase 8) |
+| **security_monitor.py** | — | Log-based attack detection: SQLi, XSS, InfoLeak, secrets, gaps |
+| **Kubernetes CronJob** | — | Triggers `POST /security-scan` every 5 minutes |
 
 ---
 
@@ -131,6 +133,8 @@
 | **Phase 7B** | Grafana dashboard — 8-panel "AIOps Incident Response" (PostgreSQL + Prometheus) |
 | **Phase 7C** | Slack notifications — Block Kit messages with severity emoji, root cause, and GitHub issue button |
 | **Phase 7D** | Alembic migration Kubernetes Job — runs `alembic upgrade head` automatically before every deploy |
+| **Phase 8A** ✓ | CryptoFlux deployed to k3s — 8 services in `cryptoflux` namespace, NodePort 30500, DR replica |
+| **Phase 8B** ✓ | Security monitoring — SQLi, XSS, InfoLeak, hardcoded secret, transaction gap, DR sync detection |
 
 ---
 
@@ -147,57 +151,45 @@ aiops-ire/
 │       ├── k3s/               # k3s single-node install
 │       └── helm/              # Helm CLI install
 │
-├── terraform/                 # Phases 2–5 — all Kubernetes resources
+├── terraform/                 # Phases 2–8 — all Kubernetes resources
 │   ├── main.tf                # Module wiring (no logic here)
 │   ├── variables.tf           # All input variables with descriptions
-│   ├── outputs.tf             # Service DNS endpoints and URLs
-│   ├── providers.tf           # kubernetes, helm, github providers
 │   └── modules/
-│       ├── namespaces/        # Phase 2 — five namespaces
+│       ├── namespaces/        # Six namespaces including cryptoflux
 │       ├── database/          # Phase 2 — PostgreSQL via Bitnami Helm
 │       ├── observability/     # Phase 3 — Prometheus, Alertmanager, Loki, Grafana
-│       │   ├── main.tf        #   Helm releases + PostgreSQL datasource
-│       │   ├── alerts.tf      #   PrometheusRule: fast-firing flask-app alerts
-│       │   └── grafana-dashboard.tf  # ConfigMap: AIOps Incident Response dashboard
-│       ├── apps/              # Phase 4 — Flask chaos-target Deployment + Service
-│       └── aiops/             # Phase 5 — aiops-brain RBAC, Secret, Deployment
-│           └── migration-job.tf      # Alembic Kubernetes Job (runs before Deployment)
+│       │   ├── alerts.tf      #   flask-app-alerts + cryptoflux-alerts PrometheusRules
+│       │   └── grafana-dashboard.tf
+│       ├── apps/              # Phase 4 — Flask chaos-target
+│       ├── aiops/             # Phase 5 — aiops-brain RBAC, Secret, Deployment
+│       └── cryptoflux/        # Phase 8 — CryptoFlux 8 services + CronJob
 │
 ├── src/
-│   ├── aiops-brain/           # Phase 5 — FastAPI incident response service
-│   │   ├── main.py            # /webhook, /health, /incidents endpoints
+│   ├── aiops-brain/           # Phase 5 + 8B — FastAPI incident response service
+│   │   ├── main.py            # /webhook /health /incidents /security-scan /security-events
 │   │   ├── analyzer.py        # Claude API integration
 │   │   ├── loki_client.py     # Loki HTTP query client
+│   │   ├── security_monitor.py# Phase 8B — log-based attack detection (6 patterns)
 │   │   ├── github_client.py   # GitHub issue creation
 │   │   ├── slack_client.py    # Slack Block Kit notifications
 │   │   ├── remediation.py     # Pod restart / rollout restart via k8s Python client
 │   │   ├── models.py          # SQLAlchemy Incident model
 │   │   ├── database.py        # Async engine and session factory
-│   │   ├── migrations/        # Alembic revisions (001_initial_incidents.py)
-│   │   ├── alembic.ini
-│   │   ├── Dockerfile
-│   │   └── build-and-load.sh  # Build + import into k3s containerd
+│   │   └── migrations/        # Alembic revisions
 │   │
-│   └── flask-apps/            # Phase 4 — chaos target microservice
-│       ├── app.py             # /health /cpu /memory /error /slow /metrics
-│       ├── Dockerfile
-│       └── build-and-load.sh
+│   ├── flask-apps/            # Phase 4 — chaos target microservice
+│   │   └── app.py             # /health /cpu /memory /error /slow /metrics
+│   │
+│   └── cryptoflux/            # Phase 8A — CryptoFlux image builder
+│       └── build-and-load-all.sh  # Builds all 6 custom images → k3s
 │
-├── chaos/                     # Phase 6 — chaos injection scripts
-│   ├── inject.sh              # Interactive menu
-│   ├── cpu_spike.sh           # Hit /cpu endpoint for 60s
-│   ├── memory_leak.sh         # Hit /memory endpoint in a loop
-│   ├── disk_fill.sh           # Write 200 MB into pod /tmp
-│   ├── network_drop.sh        # tc netem 500ms delay on eth0
-│   └── pod_kill.sh            # Force-delete a pod
-│
-└── kubernetes/                # Raw manifests (referenced by Terraform)
-    ├── namespaces/
-    ├── database/
-    ├── observability/
-    ├── apps/
-    ├── aiops/
-    └── chaos/
+└── chaos/                     # Phase 6 — chaos injection scripts
+    ├── inject.sh              # Interactive menu
+    ├── cpu_spike.sh
+    ├── memory_leak.sh
+    ├── disk_fill.sh
+    ├── network_drop.sh
+    └── pod_kill.sh
 ```
 
 ---
@@ -313,9 +305,132 @@ kubectl port-forward -n observability svc/kube-prometheus-stack-grafana 3000:80
 # open http://localhost:3000  (admin / <grafana_admin_password>)
 ```
 
-**Watch for auto-generated GitHub issues at:**
+### Phase 8A — Deploy CryptoFlux
+
+```bash
+# Add CryptoFlux variables to terraform.tfvars:
+#   cf_db_pass, cf_dr_db_pass, cf_secret_key,
+#   cf_trading_data_api_key, cf_ext_api_key
+
+# Build and load all 6 CryptoFlux images into k3s
+bash src/cryptoflux/build-and-load-all.sh
+
+# Deploy CryptoFlux namespace + all 8 services
+cd terraform
+terraform apply -target=module.cryptoflux -var-file=terraform.tfvars
+
+# Verify all pods are running
+kubectl get pods -n cryptoflux
+
+# Access the trading UI
+# open http://<node-ip>:30500
 ```
-https://github.com/DeniStojanovski/aiops-ire/issues
+
+### Phase 8B — Security monitoring (automatic after Phase 8A)
+
+The security scan CronJob starts automatically with the `cryptoflux` module. It fires every 5 minutes. To trigger a manual scan:
+
+```bash
+kubectl port-forward -n aiops svc/aiops-brain 8000:8000
+curl -X POST http://localhost:8000/security-scan
+
+# View detected security incidents
+curl http://localhost:8000/security-events | jq .
+```
+
+---
+
+## Kubernetes Namespaces
+
+| Namespace | Contents | Purpose |
+|---|---|---|
+| `observability` | Prometheus, Alertmanager, Grafana, Loki, Promtail | Full observability stack |
+| `database` | PostgreSQL 16 (Bitnami) | Persistent incident storage |
+| `apps` | flask-app Deployment (2 replicas) | Chaos injection target |
+| `aiops` | aiops-brain Deployment, migration Job, RBAC, Secrets | Incident response orchestrator |
+| `chaos` | (reserved) | Chaos tooling and test workloads |
+| `cryptoflux` | CryptoFlux trading platform (8 services) | Vulnerable app + security monitoring target |
+
+---
+
+## CryptoFlux Platform
+
+CryptoFlux is an intentionally vulnerable eight-service trading platform deployed in the `cryptoflux` namespace. It serves as the target for Phase 8B security monitoring.
+
+| Service | Port | Description |
+|---|---|---|
+| `trading-ui` | 30500 (NodePort) | Flask trading dashboard — vulnerable `/api/search` and `/internal/debug` |
+| `trading-data` | 7100 (ClusterIP) | Market data microservice |
+| `ext-api` | 8000 (ClusterIP) | External transaction API (SQLite-backed) |
+| `liquidity-calc` | 8001 (ClusterIP) | Liquidity calculator — hardcoded `INTERNAL_SERVICE_KEY` |
+| `data-ingestion` | — | Background worker — polls ext-api and inserts transactions |
+| `dr-sync` | — | Background worker — replicates primary → DR every 5 minutes |
+| `postgresql-primary` | 5432 (ClusterIP) | Primary PostgreSQL database |
+| `postgresql-dr` | 5432 (ClusterIP) | DR replica — receives sync from dr-sync worker |
+
+**Access:** `http://<node-ip>:30500`
+
+**Disaster recovery targets:**
+- RPO < 5 minutes (dr-sync interval)
+- RTO < 2 minutes (manual promotion with runbook)
+
+**Source:** [github.com/BeyondMachines/ceaao2025-cryptoflux](https://github.com/BeyondMachines/ceaao2025-cryptoflux)
+
+---
+
+## Security Monitoring
+
+`security_monitor.py` scans the last 15 minutes of Loki logs for all CryptoFlux services every time `/security-scan` is called. A Kubernetes CronJob triggers this endpoint every 5 minutes. Every detected event follows the same pipeline as a regular incident: persisted to PostgreSQL, filed as a GitHub issue, and delivered via Slack — without invoking Claude (security events require human review).
+
+| Detection | Severity | Source service | Pattern |
+|---|---|---|---|
+| SQL Injection | `critical` | `trading-ui` | `OR '1'='1'`, `UNION SELECT`, `DROP TABLE`, `--`, `1=1` in `SEARCH query=` log |
+| XSS Attack | `critical` | `trading-ui` | `<script`, `javascript:`, `onerror=`, `onload=` in `SEARCH query=` log |
+| Info Leak | `warning` | `trading-ui` | `/internal/debug` or `/internal/info` accessed |
+| Hardcoded Secret | `warning` | `liquidity-calc` | Literal `hardcoded_secret_123` appears in any log line |
+| Transaction Gap | `critical` | `data-ingestion` | No `Cycle OK` log entry in 15 minutes |
+| DR Sync Failure | `warning` | `dr-sync` | `Sync error` appears in logs |
+
+**Trigger manually:**
+
+```bash
+kubectl port-forward -n aiops svc/aiops-brain 8000:8000
+curl -X POST http://localhost:8000/security-scan
+
+# View recent security events
+curl http://localhost:8000/security-events | jq .
+```
+
+### Attack Demo Commands
+
+Demonstrate each detection by hitting the vulnerable endpoints directly:
+
+```bash
+NODE_IP=<your-node-ip>
+
+# SQL injection — OR '1'='1' bypass
+curl -g "http://${NODE_IP}:30500/api/search?q=%27%20OR%20%271%27%3D%271%27%20--"
+
+# SQL injection — UNION SELECT
+curl -g "http://${NODE_IP}:30500/api/search?q=x%27%20UNION%20SELECT%201%2C2%2C3%2C4%2C5--"
+
+# XSS — script tag in query parameter
+curl "http://${NODE_IP}:30500/api/search?q=<script>alert('xss')</script>"
+
+# XSS — event handler payload
+curl "http://${NODE_IP}:30500/api/search?q=<img%20src=x%20onerror=alert(1)>"
+
+# Info leak — dump all environment variables
+curl "http://${NODE_IP}:30500/internal/debug"
+```
+
+After running any of these, wait up to 5 minutes for the CronJob to fire, or trigger a manual scan:
+
+```bash
+kubectl port-forward -n aiops svc/aiops-brain 8000:8000 &
+curl -X POST http://localhost:8000/security-scan
+sleep 5
+curl http://localhost:8000/security-events | jq '.[0]'
 ```
 
 ---
@@ -346,17 +461,7 @@ The pipeline executes the following steps for every alert Alertmanager receives:
 
 **11. Result update** — The `remediation_action` and `remediation_result` columns in PostgreSQL are updated with the outcome. The incident record is now complete and queryable via `GET /incidents`.
 
----
-
-## Kubernetes Namespaces
-
-| Namespace | Contents | Purpose |
-|---|---|---|
-| `observability` | Prometheus, Alertmanager, Grafana, Loki, Promtail | Full observability stack |
-| `database` | PostgreSQL 16 (Bitnami) | Persistent incident storage |
-| `apps` | flask-app Deployment (2 replicas) | Chaos injection target |
-| `aiops` | aiops-brain Deployment, migration Job, RBAC, Secrets | Incident response orchestrator |
-| `chaos` | (reserved) | Chaos tooling and test workloads |
+**Security scan pipeline** (Phase 8B) — The CronJob in the `cryptoflux` namespace posts to `/security-scan` every 5 minutes. `security_monitor.py` fetches 15 minutes of Loki logs per service, runs regex detectors for each attack pattern, and routes every `SecurityEvent` through steps 7–9 above (persist, GitHub, Slack). Claude analysis and auto-remediation are skipped — security findings always require human review.
 
 ---
 
@@ -483,11 +588,6 @@ an immediate restart by the Deployment controller. The restart count increment
 was detected within the 5-minute observation window by the
 kube_pod_container_status_restarts_total metric.
 
-## Severity Assessment
-
-**Critical** — A pod restart causes a brief period of unavailability. With only
-2 replicas, each restart temporarily reduces capacity by 50%.
-
 ## Remediation Runbook
 
 1. Confirm the replacement pod has reached Running/Ready state:
@@ -501,21 +601,24 @@ kube_pod_container_status_restarts_total metric.
 
 **Auto-remediation result:** `Deleted pod flask-app-7d9f8b-xk2pq; Deployment controller will reschedule`
 
-The `GET /incidents` endpoint returns the full structured record:
+When a security scan detects SQL injection, the same pipeline produces:
+
+```
+[CRITICAL] SecurityScan:SQLInjection — trading-ui
+```
 
 ```json
 {
-  "id": "a3f2c1d4-8e7b-4a9f-b2c3-1d4e5f6a7b8c",
-  "alert_name": "FlaskAppPodRestarted",
+  "id": "b7e3a2f1-9c4d-4b8e-a1d2-3e4f5a6b7c8d",
+  "alert_name": "SecurityScan:SQLInjection",
   "severity": "critical",
-  "service": "flask-app",
-  "fired_at": "2026-03-21T14:32:07",
-  "root_cause": "The flask-app container was force-terminated...",
-  "runbook": "1. Confirm the replacement pod...",
-  "github_issue_url": "https://github.com/DeniStojanovski/aiops-ire/issues/1",
-  "remediation_action": "pod_restart(app=flask-app, namespace=apps)",
-  "remediation_result": "Deleted pod flask-app-7d9f8b-xk2pq; Deployment controller will reschedule",
-  "created_at": "2026-03-21T14:32:51"
+  "service": "trading-ui",
+  "fired_at": "2026-03-22T10:15:00",
+  "root_cause": "SQL injection pattern detected in trading-ui search query logs",
+  "github_issue_url": "https://github.com/DeniStojanovski/aiops-ire/issues/7",
+  "remediation_action": null,
+  "remediation_result": null,
+  "created_at": "2026-03-22T10:15:03"
 }
 ```
 
