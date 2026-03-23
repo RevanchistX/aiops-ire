@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}SQL Injection{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>SQL Injection</h1>
+  <span class="badge badge-vuln">VULNERABLE</span>
+  <span class="badge badge-critical">CRITICAL</span>
+  <span style="font-size:11px; color:#555; margin-left:auto;">CWE-89 &nbsp;|&nbsp; OWASP A03:2021</span>
+</div>
+
+<div class="split">
+
+  <!-- Left: vulnerable code -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Vulnerable Code</h2>
+      <pre>
+# trading-ui/app.py  (simplified)
+
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.form['username']
+    password = request.form['password']
+
+    # ⚠ RAW string interpolation — NEVER do this
+    query = (
+        f"SELECT * FROM users "
+        f"WHERE username='{username}' "
+        f"AND password='{password}'"
+    )
+    row = db.execute(query).fetchone()
+    if row:
+        session['user'] = row['username']</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem; color:#00cc33;">Safe Version</h2>
+      <pre>
+# Parameterized query — input never touches SQL grammar
+
+query = (
+    "SELECT * FROM users "
+    "WHERE username=? AND password=?"
+)
+row = db.execute(query, (username, password)).fetchone()</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem;">Attack Payloads</h2>
+      <table style="width:100%; font-size:12px; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; color:#7a9a7a; padding:0.3rem 0; border-bottom:1px solid #2a2a2a;">Username</th>
+            <th style="text-align:left; color:#7a9a7a; padding:0.3rem 0.5rem; border-bottom:1px solid #2a2a2a;">Effect</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>' OR '1'='1' --</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">Returns all rows (auth bypass)</td>
+          </tr>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>admin' --</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">Login as admin, skip password check</td>
+          </tr>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>' UNION SELECT 1,2,3,4 --</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">UNION-based column enumeration</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Right: attack form + results -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Attack Form</h2>
+      <form method="POST">
+        <label>Username</label>
+        <input type="text" name="username" placeholder="' OR '1'='1' --" value="{{ request.form.get('username','') }}">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="anything">
+        <button type="submit">Execute Query</button>
+      </form>
+    </div>
+
+    {% if query is not none %}
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem;">Query Executed</h2>
+      <pre>{{ query }}</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem;">
+        Vulnerable Result
+        {% if result_vuln %}
+          <span class="badge badge-vuln">{{ result_vuln|length }} row(s)</span>
+        {% else %}
+          <span class="badge" style="background:#333; color:#888;">0 rows</span>
+        {% endif %}
+      </h2>
+      {% if error %}
+        <div class="result-box error">{{ error }}</div>
+      {% elif result_vuln %}
+        {% for row in result_vuln %}
+        <div class="result-box success">id={{ row[0] }} &nbsp;|&nbsp; username={{ row[1] }} &nbsp;|&nbsp; role={{ row[3] }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="result-box">No rows returned.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem; color:#00cc33;">
+        Safe Result
+        {% if result_safe %}
+          <span class="badge" style="background:#004400; color:#00ff41;">{{ result_safe|length }} row(s)</span>
+        {% else %}
+          <span class="badge" style="background:#333; color:#888;">0 rows</span>
+        {% endif %}
+      </h2>
+      {% if result_safe %}
+        {% for row in result_safe %}
+        <div class="result-box success">id={{ row[0] }} &nbsp;|&nbsp; username={{ row[1] }} &nbsp;|&nbsp; role={{ row[3] }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="result-box">No rows returned — parameterized query blocked the injection.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

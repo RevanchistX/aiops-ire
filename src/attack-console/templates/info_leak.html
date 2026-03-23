@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Info Leak{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Information Leakage</h1>
+  <span class="badge badge-vuln">VULNERABLE</span>
+  <span class="badge badge-warning">HIGH</span>
+  <span style="font-size:11px; color:#555; margin-left:auto;">CWE-200 &nbsp;|&nbsp; OWASP A05:2021</span>
+</div>
+
+<div class="split">
+
+  <!-- Left: code -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Vulnerable Code — trading-data</h2>
+      <pre>
+# trading-data/app.py
+
+@app.route('/internal/info')
+def internal_info():
+    """
+    ⚠ Unauthenticated endpoint — exposes:
+      - DB connection string (user + password)
+      - Environment variables
+      - Package versions
+      - Server hostname
+    """
+    return jsonify({
+        "db_url": os.environ.get("DATABASE_URL"),
+        "env":    dict(os.environ),
+        "version": {
+            "python":  sys.version,
+            "flask":   flask.__version__,
+        },
+        "host": socket.gethostname(),
+    })</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem; color:#00cc33;">Safe Version</h2>
+      <pre>
+# Require authentication + return only safe info
+
+@app.route('/internal/info')
+@require_internal_token
+def internal_info():
+    return jsonify({
+        "status":  "ok",
+        "version": app_version,
+        # Never expose env vars or connection strings
+    })</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem;">Impact</h2>
+      <ul style="color:#7a9a7a; font-size:12px; padding-left:1rem; line-height:1.8;">
+        <li>Database credentials exposed → full data dump</li>
+        <li>API keys visible → impersonation of services</li>
+        <li>Exact package versions → targeted CVE exploitation</li>
+        <li>Internal hostnames → lateral movement mapping</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Right: probe -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Probe Internal Endpoint</h2>
+      <p style="color:#7a9a7a; font-size:12px; margin-bottom:1rem;">
+        Clicking the button below sends a request from this container to
+        <code>{{ url }}</code> — simulating server-side request forgery
+        or an attacker on the internal network.
+      </p>
+      <a class="btn danger" href="/info-leak">Send Probe</a>
+    </div>
+
+    {% if data is not none %}
+    <div class="card">
+      <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem;">
+        <h2>Response</h2>
+        {% if status %}
+        <span class="badge" style="background:{% if status == 200 %}#004400{% else %}#440000{% endif %}; color:{% if status == 200 %}#00ff41{% else %}#ff2222{% endif %};">HTTP {{ status }}</span>
+        {% endif %}
+      </div>
+      <pre style="max-height:400px; overflow-y:auto;">{{ data }}</pre>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem; color:#ff2222;">Connection Error</h2>
+      <div class="result-box error">{{ error }}</div>
+      <p style="color:#7a9a7a; font-size:11px; margin-top:0.5rem;">
+        trading-data service may not be reachable from this container.
+        In a real attack, the adversary would be on the same k8s network.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

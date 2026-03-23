@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}XSS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Cross-Site Scripting (XSS)</h1>
+  <span class="badge badge-vuln">VULNERABLE</span>
+  <span class="badge badge-critical">CRITICAL</span>
+  <span style="font-size:11px; color:#555; margin-left:auto;">CWE-79 &nbsp;|&nbsp; OWASP A03:2021</span>
+</div>
+
+<div class="split">
+
+  <!-- Left: code -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Vulnerable Code — Reflected</h2>
+      <pre>
+# app.py
+
+@app.route('/xss', methods=['POST'])
+def xss():
+    comment = request.form.get('comment', '')
+    # ⚠ rendered with |safe — no HTML encoding
+    return render_template('xss.html',
+                           reflected=comment)</pre>
+      <pre style="margin-top:0.5rem;">
+{# xss.html — Jinja2 template #}
+{% raw %}{% if reflected %}
+  &lt;div&gt;{{ reflected | safe }}&lt;/div&gt;
+{% endif %}{% endraw %}</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem; color:#00cc33;">Safe Version</h2>
+      <pre>
+{# Auto-escaping is ON by default in Flask #}
+{# Just don't use | safe filter #}
+{% raw %}{{ reflected }}{% endraw %}
+{# Jinja2 encodes &lt; &gt; &amp; " ' automatically #}</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem;">Attack Payloads</h2>
+      <table style="width:100%; font-size:12px; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; color:#7a9a7a; padding:0.3rem 0; border-bottom:1px solid #2a2a2a;">Payload</th>
+            <th style="text-align:left; color:#7a9a7a; padding:0.3rem 0.5rem; border-bottom:1px solid #2a2a2a;">Effect</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>&lt;script&gt;alert(1)&lt;/script&gt;</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">Basic script alert</td>
+          </tr>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>&lt;img src=x onerror=alert(document.cookie)&gt;</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">Cookie theft via img tag</td>
+          </tr>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>&lt;svg onload=alert('XSS')&gt;</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">SVG-based execution</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Right: forms -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Reflected XSS</h2>
+      <p style="color:#7a9a7a; font-size:12px; margin-bottom:0.75rem;">
+        Input echoed directly in the page response — script executes immediately.
+      </p>
+      <form method="POST">
+        <input type="hidden" name="action" value="reflected">
+        <label>Payload</label>
+        <input type="text" name="comment" placeholder='&lt;script&gt;alert(1)&lt;/script&gt;'>
+        <button type="submit">Inject (Reflected)</button>
+      </form>
+
+      {% if reflected is not none %}
+      <div class="result-box" style="margin-top:1rem;">
+        <strong style="color:#ff2222;">Reflected output (unescaped):</strong><br>
+        <div style="margin-top:0.5rem;">{{ reflected | safe }}</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Stored XSS</h2>
+      <p style="color:#7a9a7a; font-size:12px; margin-bottom:0.75rem;">
+        Input persisted in memory and rendered for every visitor — affects all users.
+      </p>
+      <form method="POST">
+        <input type="hidden" name="action" value="stored">
+        <label>Comment</label>
+        <input type="text" name="comment" placeholder='&lt;img src=x onerror=alert("XSS")&gt;'>
+        <button type="submit">Post Comment (Stored)</button>
+      </form>
+
+      {% if comments %}
+      <div style="margin-top:1rem;">
+        <strong style="font-size:12px; color:#7a9a7a;">Stored comments ({{ comments|length }}):</strong>
+        {% for c in comments %}
+        <div class="result-box" style="margin-top:0.4rem;">{{ c | safe }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

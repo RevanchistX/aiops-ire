@@ -1115,6 +1115,100 @@ resource "kubernetes_deployment" "dr_sync" {
   }
 }
 
+# ─── attack-console ───────────────────────────────────────────────────────────
+
+resource "kubernetes_deployment" "attack_console" {
+  metadata {
+    name      = "attack-console"
+    namespace = var.namespace
+    labels    = { app = "attack-console", managed-by = "terraform" }
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = { app = "attack-console" }
+    }
+
+    template {
+      metadata {
+        labels = { app = "attack-console" }
+      }
+
+      spec {
+        container {
+          name              = "attack-console"
+          image             = "cryptoflux-attack-console:latest"
+          image_pull_policy = "Never"
+
+          port {
+            container_port = 8090
+            protocol       = "TCP"
+          }
+
+          env {
+            name  = "TRADING_DATA_URL"
+            value = "http://trading-data:7100"
+          }
+
+          resources {
+            requests = {
+              cpu    = "100m"
+              memory = "128Mi"
+            }
+            limits = {
+              cpu    = "200m"
+              memory = "256Mi"
+            }
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/api/health"
+              port = 8090
+            }
+            initial_delay_seconds = 15
+            period_seconds        = 15
+            failure_threshold     = 3
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/api/health"
+              port = 8090
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+            failure_threshold     = 3
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "attack_console" {
+  metadata {
+    name      = "attack-console"
+    namespace = var.namespace
+    labels    = { managed-by = "terraform" }
+  }
+
+  spec {
+    selector = { app = "attack-console" }
+
+    port {
+      name        = "http"
+      port        = 8090
+      target_port = 8090
+      node_port   = 30600
+    }
+
+    type = "NodePort"
+  }
+}
+
 # ─── Security scan CronJob ────────────────────────────────────────────────────
 # Triggers the aiops-brain /security-scan endpoint every 5 minutes.
 # Uses Forbid concurrency so a slow scan never overlaps with the next run.

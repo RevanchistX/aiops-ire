@@ -14,13 +14,13 @@ Endpoints:
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import BackgroundTasks, Depends, FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from analyzer import analyse_alert
@@ -201,7 +201,22 @@ async def _process_alert(
     logger.info("pipeline alert=%s step=fetch_logs service=%s", alert_name, service)
     logs = await fetch_logs(service=service, namespace=namespace)
 
-    # ── 3. Claude API analysis ──────────────────────────────────────────────
+    # ── 3. Deduplication check (30-minute window) ───────────────────────────
+    cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=30)
+    dup_result = await db.execute(
+        select(func.count(Incident.id))
+        .where(Incident.alert_name == alert_name)
+        .where(Incident.service == service)
+        .where(Incident.created_at >= cutoff)
+    )
+    if dup_result.scalar() > 0:
+        logger.info(
+            "pipeline alert=%s deduplicated service=%s window=30m",
+            alert_name, service,
+        )
+        return
+
+    # ── 4. Claude API analysis ──────────────────────────────────────────────
     logger.info("pipeline alert=%s step=claude_analysis", alert_name)
     try:
         analysis = await analyse_alert(
@@ -221,7 +236,7 @@ async def _process_alert(
     full_response = analysis.full_response if analysis else "n/a"
     auto_remediation_safe = analysis.auto_remediation_safe if analysis else False
 
-    # ── 4. Persist incident ─────────────────────────────────────────────────
+    # ── 5. Persist incident ─────────────────────────────────────────────────
     logger.info("pipeline alert=%s step=persist", alert_name)
     incident = Incident(
         alert_name=alert_name,
@@ -239,7 +254,7 @@ async def _process_alert(
     await db.refresh(incident)
     logger.info("pipeline alert=%s step=persist incident_id=%s", alert_name, incident.id)
 
-    # ── 5. Open GitHub issue ────────────────────────────────────────────────
+    # ── 6. Open GitHub issue ────────────────────────────────────────────────
     logger.info("pipeline alert=%s step=github_issue", alert_name)
     issue_url = await open_issue(
         alert_name=alert_name,
@@ -254,7 +269,7 @@ async def _process_alert(
     incident.github_issue_url = issue_url
     await db.commit()
 
-    # ── 6. Slack notification ───────────────────────────────────────────────
+    # ── 7. Slack notification ───────────────────────────────────────────────
     logger.info("pipeline alert=%s step=slack_notify", alert_name)
     await notify_incident(
         alert_name=alert_name,
@@ -265,7 +280,7 @@ async def _process_alert(
         github_issue_url=issue_url,
     )
 
-    # ── 7. Auto-remediation ─────────────────────────────────────────────────
+    # ── 8. Auto-remediation ─────────────────────────────────────────────────
     if auto_remediation_safe:
         logger.info("pipeline alert=%s step=remediation", alert_name)
         action, result = await attempt_remediation(
@@ -281,7 +296,7 @@ async def _process_alert(
             alert_name,
         )
 
-    # ── 8. Update remediation result ────────────────────────────────────────
+    # ── 9. Update remediation result ────────────────────────────────────────
     incident.remediation_action = action
     incident.remediation_result = result
     await db.commit()
@@ -361,6 +376,21 @@ async def _process_security_event(event: SecurityEvent, db: AsyncSession) -> Non
         "security_event step=start type=%s severity=%s service=%s",
         event.event_type, event.severity, event.service,
     )
+
+    # ── 0. Deduplication check (1-hour window) ───────────────────────────────
+    cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
+    dup_result = await db.execute(
+        select(func.count(Incident.id))
+        .where(Incident.alert_name == event.event_type)
+        .where(Incident.service == event.service)
+        .where(Incident.created_at >= cutoff)
+    )
+    if dup_result.scalar() > 0:
+        logger.info(
+            "security_event deduplicated type=%s service=%s",
+            event.event_type, event.service,
+        )
+        return
 
     # ── 1. Persist ──────────────────────────────────────────────────────────
     incident = Incident(

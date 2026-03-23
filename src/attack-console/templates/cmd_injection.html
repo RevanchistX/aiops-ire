@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Command Injection{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Command Injection</h1>
+  <span class="badge badge-vuln">VULNERABLE</span>
+  <span class="badge badge-critical">CRITICAL</span>
+  <span style="font-size:11px; color:#555; margin-left:auto;">CWE-78 &nbsp;|&nbsp; OWASP A03:2021</span>
+</div>
+
+<div class="split">
+
+  <!-- Left: code -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Vulnerable Code</h2>
+      <pre>
+# app.py
+
+import os
+
+@app.route('/cmd-injection', methods=['POST'])
+def cmd_injection():
+    target = request.form.get('target', '')
+    ip     = request.remote_addr
+
+    logger.warning(
+        "CMD query=%s ip=%s", target, ip
+    )
+
+    # ⚠ Unsanitised input → shell execution
+    output = os.popen(
+        f"ping -c 1 {target}"
+    ).read()
+
+    return render_template(
+        'cmd_injection.html', output=output
+    )</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem; color:#00cc33;">Safe Version</h2>
+      <pre>
+import subprocess, re
+
+SAFE_HOST = re.compile(
+    r'^[a-zA-Z0-9.\-]{1,253}$'
+)
+
+def cmd_injection():
+    target = request.form.get('target', '')
+    if not SAFE_HOST.match(target):
+        return "Invalid host", 400
+
+    # subprocess with list args — no shell expansion
+    result = subprocess.run(
+        ["ping", "-c", "1", target],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    return render_template(..., output=result.stdout)</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem;">Attack Payloads</h2>
+      <table style="width:100%; font-size:12px; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; color:#7a9a7a; padding:0.3rem 0; border-bottom:1px solid #2a2a2a;">Input</th>
+            <th style="text-align:left; color:#7a9a7a; padding:0.3rem 0.5rem; border-bottom:1px solid #2a2a2a;">Shell expands to</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>127.0.0.1; id</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">ping then run id command</td>
+          </tr>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>127.0.0.1 &amp;&amp; cat /etc/passwd</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">Dump passwd file</td>
+          </tr>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>127.0.0.1 | env</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">Dump environment variables</td>
+          </tr>
+          <tr>
+            <td style="padding:0.3rem 0;"><code>127.0.0.1 | ls /</code></td>
+            <td style="padding:0.3rem 0.5rem; color:#7a9a7a;">List filesystem root</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Right: form -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Ping Target</h2>
+      <form method="POST">
+        <label>Host / Target</label>
+        <input type="text" name="target" placeholder="127.0.0.1; id" value="{{ request.form.get('target','') }}">
+        <button type="submit" class="danger">Execute</button>
+      </form>
+    </div>
+
+    {% if output is not none %}
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem; color:#ff2222;">Command Output</h2>
+      <pre style="max-height:350px; overflow-y:auto; color:#00ff41;">{{ output if output else '(no output)' }}</pre>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

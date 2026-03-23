@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Broken Auth{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Broken Authentication</h1>
+  <span class="badge badge-vuln">VULNERABLE</span>
+  <span class="badge badge-critical">CRITICAL</span>
+  <span style="font-size:11px; color:#555; margin-left:auto;">CWE-287 &nbsp;|&nbsp; OWASP A07:2021</span>
+</div>
+
+<div class="split">
+
+  <!-- Left: code -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Vulnerable Code</h2>
+      <pre>
+# app.py
+
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.form.get('username', '')
+    password = request.form.get('password', '')
+    ip = request.remote_addr
+
+    logger.warning(
+        "LOGIN attempt user=%s ip=%s",
+        username, ip
+    )
+
+    # ⚠ Direct string interpolation into SQL
+    query = (
+        f"SELECT * FROM users "
+        f"WHERE username='{username}' "
+        f"AND password='{password}'"
+    )
+    row = db.execute(query).fetchone()
+    if row:
+        # Weak JWT — alg: none, no signature
+        return issue_fake_jwt(row)</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem; color:#00cc33;">Safe Version</h2>
+      <pre>
+# Parameterized query + proper JWT signing
+
+row = db.execute(
+    "SELECT * FROM users "
+    "WHERE username=? AND password=?",
+    (username, bcrypt.check(password))
+).fetchone()
+
+# Use python-jose / PyJWT with a real secret
+token = jwt.encode(
+    {"sub": row["username"], "exp": ...},
+    SECRET_KEY, algorithm="HS256"
+)</pre>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem;">Bypass Payload</h2>
+      <pre>Username:  admin' OR '1'='1' --
+Password:  (anything)
+
+Resulting SQL:
+SELECT * FROM users
+WHERE username='admin' OR '1'='1' --'
+AND password='...'
+-- The AND password clause is commented out.
+-- '1'='1' is always true → first row returned.</pre>
+    </div>
+  </div>
+
+  <!-- Right: form -->
+  <div>
+    <div class="card">
+      <h2 style="margin-bottom:0.75rem;">Login Form</h2>
+
+      {% if success %}
+      <div class="result-box success" style="margin-bottom:1rem;">
+        ✓ Welcome, <strong>admin</strong> — authentication bypassed via SQL injection.
+      </div>
+      <div class="card" style="background:#001a00; border-color:#004400;">
+        <h2 style="margin-bottom:0.5rem; color:#00ff41;">Fake JWT Token</h2>
+        <pre style="word-break:break-all; color:#00ff41;">{{ fake_jwt }}</pre>
+        <p style="font-size:11px; color:#7a9a7a; margin-top:0.5rem;">
+          alg: none — no signature validation, trivially forgeable.
+        </p>
+      </div>
+      {% endif %}
+
+      {% if error %}
+      <div class="result-box error" style="margin-bottom:1rem;">✗ {{ error }}</div>
+      {% endif %}
+
+      <form method="POST">
+        <label>Username</label>
+        <input type="text" name="username" placeholder="admin' OR '1'='1' --" value="{{ request.form.get('username','') }}">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="anything">
+        <button type="submit">Login</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:0.5rem;">Valid Credentials (for reference)</h2>
+      <table style="width:100%; font-size:12px; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; color:#7a9a7a; padding:0.3rem 0; border-bottom:1px solid #2a2a2a;">Username</th>
+            <th style="text-align:left; color:#7a9a7a; padding:0.3rem 0.5rem; border-bottom:1px solid #2a2a2a;">Password</th>
+            <th style="text-align:left; color:#7a9a7a; padding:0.3rem 0.5rem; border-bottom:1px solid #2a2a2a;">Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:0.25rem 0;">admin</td>
+            <td style="padding:0.25rem 0.5rem; color:#7a9a7a;">supersecret</td>
+            <td style="padding:0.25rem 0.5rem;"><span class="badge badge-critical">admin</span></td>
+          </tr>
+          <tr>
+            <td style="padding:0.25rem 0;">alice</td>
+            <td style="padding:0.25rem 0.5rem; color:#7a9a7a;">password123</td>
+            <td style="padding:0.25rem 0.5rem; color:#7a9a7a;">user</td>
+          </tr>
+          <tr>
+            <td style="padding:0.25rem 0;">bob</td>
+            <td style="padding:0.25rem 0.5rem; color:#7a9a7a;">letmein</td>
+            <td style="padding:0.25rem 0.5rem; color:#7a9a7a;">user</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>CryptoFlux Vulnerability Lab</h1>
+  <span class="badge badge-vuln">VULNERABLE</span>
+</div>
+
+<div class="card" style="margin-bottom:1.5rem; border-color:#2a4a2a;">
+  <p style="color:#7a9a7a; font-size:12px;">
+    This console demonstrates intentional security vulnerabilities in the CryptoFlux trading platform.
+    Each module shows a vulnerable code path alongside the safe alternative.
+    Attacks are logged to Loki and detected by the aiops-brain security scanner.
+  </p>
+</div>
+
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1rem;">
+
+  <!-- SQL Injection -->
+  <div class="card">
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem;">
+      <h2>SQL Injection</h2>
+      <span class="badge badge-critical">CRITICAL</span>
+    </div>
+    <p style="color:#7a9a7a; font-size:12px; margin-bottom:0.75rem;">
+      Unsanitised user input is concatenated directly into SQL queries,
+      allowing an attacker to bypass authentication, dump tables, or drop the database.
+    </p>
+    <p style="font-size:11px; color:#555; margin-bottom:0.75rem;">
+      CVE ref: CWE-89 &nbsp;|&nbsp; OWASP A03:2021
+    </p>
+    <a class="btn" href="/sqli">Launch &rarr;</a>
+  </div>
+
+  <!-- XSS -->
+  <div class="card">
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem;">
+      <h2>Cross-Site Scripting (XSS)</h2>
+      <span class="badge badge-critical">CRITICAL</span>
+    </div>
+    <p style="color:#7a9a7a; font-size:12px; margin-bottom:0.75rem;">
+      User-supplied content is reflected or stored without HTML encoding,
+      enabling script injection into the browser of any visitor.
+    </p>
+    <p style="font-size:11px; color:#555; margin-bottom:0.75rem;">
+      CVE ref: CWE-79 &nbsp;|&nbsp; OWASP A03:2021
+    </p>
+    <a class="btn" href="/xss">Launch &rarr;</a>
+  </div>
+
+  <!-- Broken Auth -->
+  <div class="card">
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem;">
+      <h2>Broken Authentication</h2>
+      <span class="badge badge-critical">CRITICAL</span>
+    </div>
+    <p style="color:#7a9a7a; font-size:12px; margin-bottom:0.75rem;">
+      Login form is vulnerable to SQL injection bypass.
+      Use <code style="padding:0.1em 0.3em;">admin' OR '1'='1' --</code> as username to gain access without a password.
+    </p>
+    <p style="font-size:11px; color:#555; margin-bottom:0.75rem;">
+      CVE ref: CWE-287 &nbsp;|&nbsp; OWASP A07:2021
+    </p>
+    <a class="btn" href="/login">Launch &rarr;</a>
+  </div>
+
+  <!-- Info Leak -->
+  <div class="card">
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem;">
+      <h2>Information Leakage</h2>
+      <span class="badge badge-warning">HIGH</span>
+    </div>
+    <p style="color:#7a9a7a; font-size:12px; margin-bottom:0.75rem;">
+      The <code style="padding:0.1em 0.3em;">trading-data</code> service exposes an unauthenticated
+      <code style="padding:0.1em 0.3em;">/internal/info</code> endpoint that reveals DB credentials,
+      version strings, and environment variables.
+    </p>
+    <p style="font-size:11px; color:#555; margin-bottom:0.75rem;">
+      CVE ref: CWE-200 &nbsp;|&nbsp; OWASP A05:2021
+    </p>
+    <a class="btn" href="/info-leak">Launch &rarr;</a>
+  </div>
+
+  <!-- Command Injection -->
+  <div class="card">
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem;">
+      <h2>Command Injection</h2>
+      <span class="badge badge-critical">CRITICAL</span>
+    </div>
+    <p style="color:#7a9a7a; font-size:12px; margin-bottom:0.75rem;">
+      User input is passed directly to <code style="padding:0.1em 0.3em;">os.popen()</code> without sanitisation.
+      Append <code style="padding:0.1em 0.3em;">; id</code> or <code style="padding:0.1em 0.3em;">&& cat /etc/passwd</code>
+      to the ping target to run arbitrary OS commands.
+    </p>
+    <p style="font-size:11px; color:#555; margin-bottom:0.75rem;">
+      CVE ref: CWE-78 &nbsp;|&nbsp; OWASP A03:2021
+    </p>
+    <a class="btn" href="/cmd-injection">Launch &rarr;</a>
+  </div>
+
+</div>
+{% endblock %}

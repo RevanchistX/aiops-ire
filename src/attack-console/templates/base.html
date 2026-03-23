@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Attack Console{% endblock %} :: CryptoFlux</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a0a0a;
+      --bg2:      #111111;
+      --bg3:      #1a1a1a;
+      --border:   #2a2a2a;
+      --green:    #00ff41;
+      --green-dim:#00cc33;
+      --red:      #ff2222;
+      --yellow:   #ffcc00;
+      --cyan:     #00e5ff;
+      --text:     #c8ffc8;
+      --text-dim: #7a9a7a;
+      --font:     'Courier New', Courier, monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Navbar ── */
+    nav {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--green-dim);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+
+    nav .brand {
+      font-size: 1.1rem;
+      color: var(--green);
+      padding: 0.75rem 1rem 0.75rem 0;
+      margin-right: 1rem;
+      border-right: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    nav .brand span { color: var(--red); }
+
+    nav a {
+      color: var(--text-dim);
+      text-decoration: none;
+      padding: 0.75rem 0.8rem;
+      transition: color 0.15s;
+      white-space: nowrap;
+    }
+
+    nav a:hover, nav a.active { color: var(--green); }
+
+    /* ── Page wrapper ── */
+    .page { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+
+    /* ── Section heading ── */
+    h1, h2, h3 {
+      color: var(--green);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 { font-size: 1.4rem; }
+    h2 { font-size: 1.1rem; }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: bold;
+      padding: 0.2em 0.5em;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      vertical-align: middle;
+    }
+    .badge-vuln    { background: var(--red);    color: #fff; }
+    .badge-critical{ background: #aa0000;        color: #fff; }
+    .badge-warning { background: var(--yellow);  color: #000; }
+    .badge-info    { background: var(--cyan);    color: #000; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Split layout ── */
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    @media (max-width: 768px) { .split { grid-template-columns: 1fr; } }
+
+    /* ── Code blocks ── */
+    pre, code {
+      font-family: var(--font);
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 0.75rem;
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--cyan);
+    }
+
+    /* ── Forms ── */
+    label { display: block; color: var(--text-dim); margin-bottom: 0.25rem; font-size: 12px; }
+
+    input[type=text], input[type=password], textarea {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--green);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 0.5rem;
+      border-radius: 3px;
+      margin-bottom: 0.75rem;
+      outline: none;
+    }
+
+    input[type=text]:focus, input[type=password]:focus, textarea:focus {
+      border-color: var(--green-dim);
+    }
+
+    button, .btn {
+      background: transparent;
+      border: 1px solid var(--green-dim);
+      color: var(--green);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 0.5rem 1.2rem;
+      cursor: pointer;
+      border-radius: 3px;
+      text-decoration: none;
+      display: inline-block;
+      margin-right: 0.5rem;
+    }
+
+    button:hover, .btn:hover { background: var(--green-dim); color: #000; }
+
+    button.danger { border-color: var(--red); color: var(--red); }
+    button.danger:hover { background: var(--red); color: #fff; }
+
+    /* ── Result boxes ── */
+    .result-box {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-size: 12px;
+      color: var(--cyan);
+    }
+
+    .result-box.success { border-color: var(--green-dim); color: var(--green); }
+    .result-box.error   { border-color: var(--red); color: var(--red); }
+
+    /* ── Page header bar ── */
+    .page-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .page-header h1 { margin: 0; }
+
+    /* ── Divider ── */
+    hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 3rem;
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 11px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">[<span>!</span>] ATTACK CONSOLE</div>
+  <a href="/"      {% if request.path == '/'              %}class="active"{% endif %}>Home</a>
+  <a href="/sqli"  {% if request.path == '/sqli'          %}class="active"{% endif %}>SQL Injection</a>
+  <a href="/xss"   {% if request.path == '/xss'           %}class="active"{% endif %}>XSS</a>
+  <a href="/login" {% if request.path == '/login'         %}class="active"{% endif %}>Broken Auth</a>
+  <a href="/info-leak" {% if request.path == '/info-leak' %}class="active"{% endif %}>Info Leak</a>
+  <a href="/cmd-injection" {% if request.path == '/cmd-injection' %}class="active"{% endif %}>Cmd Injection</a>
+</nav>
+
+<div class="page">
+  {% block content %}{% endblock %}
+</div>
+
+<footer>
+  CryptoFlux Attack Console — Phase 8C Security Training &nbsp;|&nbsp;
+  FOR EDUCATIONAL USE ONLY — DO NOT DEPLOY IN PRODUCTION
+</footer>
+
+</body>
+</html>

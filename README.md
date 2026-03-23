@@ -20,7 +20,7 @@ Phase 8 extends the platform with **CryptoFlux** — an intentionally vulnerable
 
 ---
 
-> **Current Phase:** Phase 8B Complete — CryptoFlux Security Monitoring
+> **Current Phase:** Phase 8C Complete — Attack Console + Security Monitoring
 
 ---
 
@@ -44,7 +44,7 @@ Phase 8 extends the platform with **CryptoFlux** — an intentionally vulnerable
                              ▼            │ postgresql-primary  :5432    │
   ┌──────────────────────────────────────┐│ postgresql-dr       :5432    │
   │  Namespace: observability            ││ (DR replica — RPO < 5 min)  │
-  │                                      ││                              │
+  │                                      ││ attack-console :30600 (ext)  │
   │  Prometheus ──  PrometheusRules      ││ CronJob: security-scan ────┐ │
   │   flask-app-alerts   (3 rules)       ││ POST /security-scan        │ │
   │   cryptoflux-alerts  (3 rules)       ││ every 5 minutes            │ │
@@ -114,7 +114,8 @@ Phase 8 extends the platform with **CryptoFlux** — an intentionally vulnerable
 | **slack-sdk** | 3.34.0 | Slack Block Kit incident notifications via incoming webhook |
 | **kubernetes** (Python) | 31.0.0 | In-cluster RBAC-backed auto-remediation |
 | **CryptoFlux** (Flask, Python) | — | Intentionally vulnerable 8-service trading platform (Phase 8) |
-| **security_monitor.py** | — | Log-based attack detection: SQLi, XSS, InfoLeak, secrets, gaps |
+| **Attack Console** (Flask, Python) | — | DVWA-style vulnerability lab at port 30600 — SQLi, XSS, broken auth, info leak, command injection |
+| **security_monitor.py** | — | Log-based attack detection: SQLi, XSS, InfoLeak, secrets, gaps, command injection, broken auth |
 | **Kubernetes CronJob** | — | Triggers `POST /security-scan` every 5 minutes |
 
 ---
@@ -135,6 +136,7 @@ Phase 8 extends the platform with **CryptoFlux** — an intentionally vulnerable
 | **Phase 7D** | Alembic migration Kubernetes Job — runs `alembic upgrade head` automatically before every deploy |
 | **Phase 8A** ✓ | CryptoFlux deployed to k3s — 8 services in `cryptoflux` namespace, NodePort 30500, DR replica |
 | **Phase 8B** ✓ | Security monitoring — SQLi, XSS, InfoLeak, hardcoded secret, transaction gap, DR sync detection |
+| **Phase 8C** ✓ | Attack Console (DVWA-style) + deduplication + DR sync fixed |
 
 ---
 
@@ -388,8 +390,12 @@ CryptoFlux is an intentionally vulnerable eight-service trading platform deploye
 | XSS Attack | `critical` | `trading-ui` | `<script`, `javascript:`, `onerror=`, `onload=` in `SEARCH query=` log |
 | Info Leak | `warning` | `trading-ui` | `/internal/debug` or `/internal/info` accessed |
 | Hardcoded Secret | `warning` | `liquidity-calc` | Literal `hardcoded_secret_123` appears in any log line |
-| Transaction Gap | `critical` | `data-ingestion` | No `Cycle OK` log entry in 15 minutes |
+| Transaction Gap | `critical` | `data-ingestion` | No `Cycle OK` or `ok=N` log entry in 15 minutes |
 | DR Sync Failure | `warning` | `dr-sync` | `Sync error` appears in logs |
+| Command Injection | `critical` | `attack-console` | `CMD query=` log line containing shell metacharacters (`;`, `&`, `\|`, `` ` ``) |
+| Broken Authentication | `critical` | `attack-console` | `LOGIN attempt` log line with `OR '1'='1'`, `admin' --`, or `' OR` SQLi pattern |
+
+Each event type is deduplicated within a 1-hour window — the same attack type on the same service creates only one GitHub issue per hour, preventing alert spam.
 
 **Trigger manually:**
 
@@ -422,6 +428,15 @@ curl "http://${NODE_IP}:30500/api/search?q=<img%20src=x%20onerror=alert(1)>"
 
 # Info leak — dump all environment variables
 curl "http://${NODE_IP}:30500/internal/debug"
+
+# Broken auth bypass (Attack Console)
+# Go to http://<node-ip>:30600/login
+# Username: admin' OR '1'='1' --
+# Password: (anything)
+
+# Command injection (Attack Console)
+# Go to http://<node-ip>:30600/cmd-injection
+# Target: 127.0.0.1; id
 ```
 
 After running any of these, wait up to 5 minutes for the CronJob to fire, or trigger a manual scan:
@@ -431,6 +446,36 @@ kubectl port-forward -n aiops svc/aiops-brain 8000:8000 &
 curl -X POST http://localhost:8000/security-scan
 sleep 5
 curl http://localhost:8000/security-events | jq '.[0]'
+```
+
+---
+
+## Attack Console
+
+A DVWA-style vulnerability lab deployed at `http://<node-ip>:30600`. Built as a separate Flask service in the `cryptoflux` namespace, it demonstrates five OWASP vulnerability classes against the CryptoFlux platform. Every attack is logged via `logger.warning` so Loki captures it and the aiops-brain security scanner can detect it.
+
+| Vulnerability | Severity | CWE | OWASP |
+|---|---|---|---|
+| SQL Injection | Critical | CWE-89 | A03:2021 |
+| Cross-Site Scripting (XSS) | Critical | CWE-79 | A03:2021 |
+| Broken Authentication | Critical | CWE-287 | A07:2021 |
+| Information Leakage | High | CWE-200 | A05:2021 |
+| Command Injection | Critical | CWE-78 | A03:2021 |
+
+Each page shows:
+- Vulnerable code vs the safe parameterized alternative
+- Live attack form with results
+- Example payloads
+- All attacks logged to Loki and detected by aiops-brain
+
+**Access:** `http://<node-ip>:30600`
+
+**Build and deploy:**
+
+```bash
+bash src/attack-console/build-and-load.sh
+cd terraform
+terraform apply -target=module.cryptoflux -var-file=terraform.tfvars
 ```
 
 ---
