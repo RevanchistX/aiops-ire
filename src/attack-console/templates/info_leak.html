@@ -70,8 +70,10 @@ def internal_info():
       <h2 style="margin-bottom:0.75rem;">Probe Internal Endpoint</h2>
       <p style="color:#7a9a7a; font-size:12px; margin-bottom:1rem;">
         Clicking the button below sends a request from this container to
-        <code>{{ url }}</code> — simulating server-side request forgery
-        or an attacker on the internal network.
+      </p>
+      <code style="display:block; margin-bottom:1rem;">{{ url }}</code>
+      <p style="color:#7a9a7a; font-size:12px; margin-bottom:1rem;">
+        — simulating server-side request forgery or an attacker on the internal network.
       </p>
       <a class="btn danger" href="/info-leak">Send Probe</a>
     </div>
