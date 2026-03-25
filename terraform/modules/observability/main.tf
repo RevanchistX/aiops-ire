@@ -39,7 +39,7 @@ resource "helm_release" "kube_prometheus_stack" {
         storageSpec:
           volumeClaimTemplate:
             spec:
-              storageClassName: local-path
+              storageClassName: hostpath
               accessModes: ["ReadWriteOnce"]
               resources:
                 requests:
@@ -143,6 +143,10 @@ resource "helm_release" "kube_prometheus_stack" {
           memory: "64Mi"
     EOT
   ]
+
+  provisioner "local-exec" {
+    command = "kubectl wait --for=condition=established --timeout=300s crd/prometheusrules.monitoring.coreos.com 2>/dev/null || true"
+  }
 }
 
 # ─── Loki ─────────────────────────────────────────────────────────────────────
@@ -182,7 +186,7 @@ resource "helm_release" "loki" {
       replicas: 1
       persistence:
         enabled: true
-        storageClass: local-path
+        storageClass: hostpath
         size: ${var.loki_storage_size}
       resources:
         requests:

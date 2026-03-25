@@ -24,6 +24,20 @@ resource "kubernetes_secret" "cryptoflux_secrets" {
   }
 }
 
+# ─── Secret: ext-api-keys (SQLite DB placeholder) ─────────────────
+resource "kubernetes_secret" "ext_api_keys" {
+  metadata {
+    name      = "ext-api-keys"
+    namespace = var.namespace
+    labels    = { managed-by = "terraform" }
+  }
+
+  # Placeholder file - ext-api initializes if empty
+  data = {
+    "api_keys.db" = "SQLite format 3"
+  }
+}
+
 # ─── ConfigMaps (PostgreSQL init SQL) ─────────────────────────────────────────
 # \c lines removed — initdb scripts run in the context of POSTGRES_DB already.
 
@@ -290,7 +304,7 @@ resource "kubernetes_stateful_set" "postgresql_primary" {
       }
       spec {
         access_modes       = ["ReadWriteOnce"]
-        storage_class_name = "local-path"
+        storage_class_name = "hostpath"
         resources {
           requests = {
             storage = "5Gi"
@@ -444,7 +458,7 @@ resource "kubernetes_stateful_set" "postgresql_dr" {
       }
       spec {
         access_modes       = ["ReadWriteOnce"]
-        storage_class_name = "local-path"
+        storage_class_name = "hostpath"
         resources {
           requests = {
             storage = "5Gi"
