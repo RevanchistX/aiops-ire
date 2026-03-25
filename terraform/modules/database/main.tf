@@ -1,71 +1,119 @@
-resource "helm_release" "postgresql" {
-  name       = "postgresql"
-  repository = "oci://registry-1.docker.io/bitnamicharts"
-  chart      = "postgresql"
-  version    = var.chart_version
-  namespace  = var.namespace
+resource "kubernetes_secret" "postgresql" {
+  metadata {
+    name      = "postgresql"
+    namespace = var.namespace
+    labels    = { managed-by = "terraform" }
+  }
+  data = {
+    password = var.db_password
+  }
+}
 
-  # Allow Terraform to wait until the pod is ready before marking complete
-  wait    = true
-  timeout = 300
+resource "kubernetes_service" "postgresql" {
+  metadata {
+    name      = "postgresql"
+    namespace = var.namespace
+    labels    = { app = "postgresql", managed-by = "terraform" }
+  }
+  spec {
+    selector   = { app = "postgresql" }
+    cluster_ip = "None"  # headless for StatefulSet DNS
+    port {
+      port        = 5432
+      target_port = 5432
+    }
+  }
+}
 
-  set {
-    name  = "auth.database"
-    value = var.db_name
+resource "kubernetes_stateful_set" "postgresql" {
+  metadata {
+    name      = "postgresql"
+    namespace = var.namespace
+    labels    = { app = "postgresql", managed-by = "terraform" }
   }
 
-  set {
-    name  = "auth.username"
-    value = var.db_user
-  }
+  spec {
+    service_name = kubernetes_service.postgresql.metadata[0].name
+    replicas     = 1
 
-  set_sensitive {
-    name  = "auth.password"
-    value = var.db_password
-  }
+    selector {
+      match_labels = { app = "postgresql" }
+    }
 
-  set_sensitive {
-    # Separate postgres superuser password — must not be blank
-    name  = "auth.postgresPassword"
-    value = var.db_password
-  }
+    template {
+      metadata {
+        labels = { app = "postgresql" }
+      }
 
-  # Use k3s default StorageClass for local PVCs
-  set {
-    name  = "primary.persistence.storageClass"
-    value = "local-path"
-  }
+      spec {
+        container {
+          name  = "postgresql"
+          image = "postgres:16"
 
-  set {
-    name  = "primary.persistence.size"
-    value = var.storage_size
-  }
+          port { container_port = 5432 }
 
-  # Disable resourcesPreset so explicit primary.resources takes effect (v18 chart default is "nano")
-  set {
-    name  = "primary.resourcesPreset"
-    value = "none"
-  }
+          env {
+            name  = "POSTGRES_DB"
+            value = var.db_name
+          }
+          env {
+            name  = "POSTGRES_USER"
+            value = var.db_user
+          }
+          env {
+            name = "POSTGRES_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.postgresql.metadata[0].name
+                key  = "password"
+              }
+            }
+          }
+          env {
+            name  = "PGDATA"
+            value = "/var/lib/postgresql/data/pgdata"
+          }
 
-  # Resource requests
-  set {
-    name  = "primary.resources.requests.cpu"
-    value = "100m"
-  }
+          volume_mount {
+            name       = "data"
+            mount_path = "/var/lib/postgresql/data"
+          }
 
-  set {
-    name  = "primary.resources.requests.memory"
-    value = "256Mi"
-  }
+          liveness_probe {
+            exec {
+              command = ["pg_isready", "-U", var.db_user, "-d", var.db_name]
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 10
+            failure_threshold     = 6
+          }
 
-  # Resource limits
-  set {
-    name  = "primary.resources.limits.cpu"
-    value = "500m"
-  }
+          readiness_probe {
+            exec {
+              command = ["pg_isready", "-U", var.db_user, "-d", var.db_name]
+            }
+            initial_delay_seconds = 5
+            period_seconds        = 10
+            failure_threshold     = 6
+          }
 
-  set {
-    name  = "primary.resources.limits.memory"
-    value = "512Mi"
+          resources {
+            requests = { cpu = "100m", memory = "256Mi" }
+            limits   = { cpu = "500m", memory = "512Mi" }
+          }
+        }
+      }
+    }
+
+    volume_claim_template {
+      metadata { name = "data" }
+      spec {
+        access_modes       = ["ReadWriteOnce"]
+        storage_class_name = "hostpath"
+        resources {
+          requests = { storage = var.storage_size }
+        }
+      }
+    }
   }
 }

@@ -1,0 +1,3 @@
+[submodule "src/cryptoflux"]
+	path = src/cryptoflux
+	url = https://github.com/BeyondMachines/ceaao2025-cryptoflux

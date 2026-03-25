@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  terraform:
+    image: hashicorp/terraform:latest
+    working_dir: /terraform
+    volumes:
+      - ./terraform:/terraform
+      - ${HOME}/.kube/config:/root/.kube/config:ro
+      - ${HOME}/.cache/terraform:/root/.terraform.d/plugin-cache
+      - ${HOME}/.cache/helm:/root/.cache/helm
+    environment:
+      - TF_PLUGIN_CACHE_DIR=/root/.terraform.d/plugin-cache
+      - TF_LOG=
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    entrypoint: terraform
+    command: version
+    stdin_open: true
+    tty: true

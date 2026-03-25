@@ -24,9 +24,3 @@ variable "storage_size" {
   type        = string
   default     = "5Gi"
 }
-
-variable "chart_version" {
-  description = "Bitnami postgresql Helm chart version to pin"
-  type        = string
-  default     = "17.1.0"  # PostgreSQL 17.x
-}

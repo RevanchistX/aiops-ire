@@ -33,12 +33,6 @@ variable "grafana_admin_password" {
   sensitive   = true
 }
 
-variable "chart_version" {
-  description = "Bitnami postgresql Helm chart version to pin (overrides module default)"
-  type        = string
-  default     = null  # uses module default when omitted
-}
-
 variable "claude_api_key" {
   description = "Anthropic API key for aiops-brain Claude claude-sonnet-4-20250514 calls"
   type        = string
